@@ -1,0 +1,27 @@
+{
+  "name": "redscript-language-support",
+  "displayName": "Redscript Language Support",
+  "description": "Adds syntax highlighting for redscript",
+  "version": "0.0.1",
+  "publisher": "TBCM",
+  "engines": {
+    "vscode": "^1.50.0"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "redscript",
+        "aliases": ["rscript"],
+        "extensions": [".rsc"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "redscript",
+        "scopeName": "source.redscript",
+        "path": "./syntaxes/redscript.tmLanguage.json"
+      }
+    ]
+  }
+}

@@ -33,7 +33,34 @@ enum class bst_operation_type
 
     NONE
 };
+enum class comparison_operation_type
+{
+    EQ,NEQ,GT,LT,GTE,LTE,
 
+    NONE
+};
+inline std::string operationTypeToStr(bst_operation_type t)
+{
+    switch(t)
+    {
+        case bst_operation_type::ADD:
+            return std::string(1, '+');
+        case bst_operation_type::SUB:
+            return std::string(1, '-');
+        case bst_operation_type::MUL:
+            return std::string(1, '*');
+        case bst_operation_type::DIV:
+            return std::string(1, '/');
+        case bst_operation_type::POW:
+            return "**";
+        case bst_operation_type::XOR:
+            return std::string(1, '^');
+        case bst_operation_type::MOD:
+            return std::string(1, '%');
+    }
+
+    return "NULL";
+}
 inline int operatorPrecedence(bst_operation_type ot)
 {
     switch(ot)
@@ -74,6 +101,29 @@ inline int operatorPrecedence(char op)
             return -1;
     }
 }
+template<typename _T>
+inline _T operator_compute(_T left, bst_operation_type op, _T right)
+{
+    using ot = bst_operation_type;
+    switch(op)
+    {
+        case ot::ADD:
+            return left + right;
+        case ot::SUB:
+            return left - right;
+        case ot::MUL:
+            return left * right;
+        case ot::DIV:
+            return left / right;
+        case ot::MOD:
+            if constexpr (std::is_integral_v<_T>)
+            {
+                return left % right;
+            }
+            break;
+    }
+    return left;
+}
 template<typename _Storage>
 struct bst_operation
 {
@@ -83,6 +133,17 @@ struct bst_operation
     std::shared_ptr<_ValueT> left;
     std::shared_ptr<_ValueT> right;
     bst_operation_type operation = bst_operation_type::NONE;
+    inline void makeSingular(_Storage& s)
+    {
+        left = std::make_shared<_ValueT>(s);
+
+        right.reset();
+        operation = bst_operation_type::NONE;
+    }
+    inline bool isSingular()
+    {
+        return left && left->index() && !right && operation == bst_operation_type::NONE;
+    }
     inline bool assignNext(_Storage& s)
     {
         // TODO FIX
@@ -134,6 +195,56 @@ struct bst_operation
                 return false;
         }
         return true;
+    }
+    inline std::string tostr(int d = 0)
+    {
+        std::string tabs;
+        for (int i = 0; i < d; i++) tabs.push_back('\t');
+
+        std::string ret = '\n' + tabs + "< ";
+        _ValueT& l = *left;
+        if(l.index())
+            ret += std::get<1>(l);
+        else
+            ret += std::get<0>(l).tostr(d + 1);
+        if(operation != bst_operation_type::NONE)
+        {
+            ret += ", ";
+            switch(operation)
+            {
+                case bst_operation_type::ADD:
+                    ret.push_back('+');
+                    break;
+                case bst_operation_type::SUB:
+                    ret.push_back('-');
+                    break;
+                case bst_operation_type::MUL:
+                    ret.push_back('*');
+                    break;
+                case bst_operation_type::DIV:
+                    ret.push_back('/');
+                    break;
+                case bst_operation_type::MOD:
+                    ret.push_back('%');
+                    break;
+            }
+
+        }
+        else 
+        {
+            ret += ", NONE";
+        }
+        if(right)
+        {
+            ret += ", ";
+            _ValueT& r = *right;
+            if(r.index())
+                ret += std::get<1>(r);
+            else
+                ret += std::get<0>(r).tostr(d + 1);
+        }
+        ret += ">";
+        return ret;
     }
 };
 

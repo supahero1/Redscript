@@ -2,5 +2,5 @@
 #include <fstream>
 #include <string>
 #include <sstream>
-
-std::string readFile(const std::string&);
+#include <filesystem>
+std::string readFile(const std::filesystem::path&);

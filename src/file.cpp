@@ -1,6 +1,6 @@
 #include "file.hpp"
 
-std::string readFile(const std::string& path)
+std::string readFile(const std::filesystem::path& path)
 {
     std::fstream stream(path);
 

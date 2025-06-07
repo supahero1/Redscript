@@ -29,6 +29,9 @@ enum class token_type
     
     /* -- SYMBOL GROUPS -- */
     OPERATOR,
+    VAR_OPERATOR,
+    COMPARE_EQUAL,
+    COMPARE_NOTEQUAL,
 
     SYMBOL,
 
@@ -48,8 +51,15 @@ enum class token_type
 
     KW_RETURN,
     KW_METHOD,
+    KW_USE,
+    KW_IF,
+    KW_ELSE,
+    KW_ELIF,
 
     KW_CONST,
+    KW_OPTIONAL,
+    KW_REQUIRED,
+    KW_SEPERATE,
 
     KW_FOR,
     KW_WHILE,
@@ -67,20 +77,25 @@ struct token
 {
     std::string repr;
     token_type  type;
-    uint32_t    info;
+    int32_t     info = -1;
 
     raw_trace_info trace;
 
     std::string str()
     {
         if (type == token_type::STRING_LITERAL)
-            return std::format("{{\"{}\", {}, {}}}", repr, static_cast<int>(type), info);
-        return std::format("{{{}, {}, {}}}", repr, static_cast<int>(type), info);
+            return std::format("{{\"{}\", {}, {}, {}}}", repr, static_cast<int>(type), info, trace.caret);
+        return std::format("{{{}, {}, {}, {}}}", repr, static_cast<int>(type), info, trace.caret);
     }
-    token(std::string _repr, token_type _type, uint32_t _info, raw_trace_info _trace, size_t start)
+    operator std::string()
+    {
+        return repr;
+    }
+    token(std::string _repr, token_type _type, uint32_t _info, raw_trace_info _trace, long start)
         : repr(_repr), type(_type), info(_info), trace(_trace)
     {
-        trace.start = start;
+        trace.start = start - trace.nlindex;
+        if (trace.start == trace.caret) trace.start = -1;
     }
     token(std::string _repr, token_type _type, uint32_t _info, raw_trace_info _trace)
         : repr(_repr), type(_type), info(_info), trace(_trace) {}

@@ -4,19 +4,17 @@ void printerr(rs_error& error)
 {
     std::stringstream fileStr;
     fileStr << error.fName << ':' << error.trace.line << ':' << error.trace.caret;
-    ERROR("[RS-%d] %s", error.trace.ec, error.message.c_str());
+    ERROR("[RS:%d] %s", error.trace.ec, error.message.c_str());
     std::cout << "\n\n\t -- " << fileStr.str() << " -- \n\n";
-    int beforeLineCount = error.trace.line - RS_ERROR_LINE_PADDING;
-    if (beforeLineCount > 0)
-        for(int i = 0; i < RS_ERROR_LINE_PADDING; i++)
-            std::cout << "      |\n";
+    for(int i = 0; i < std::min(error.trace.line - RS_ERROR_LINE_PADDING + 1, (long)RS_ERROR_LINE_PADDING); i++)
+        std::cout << "      |\n";
 
     std::stringstream errorHighlight;
     bool hasEnd = error.trace.start != -1;
     if (hasEnd)
     {
-        for(int i = 0; i < error.trace.start - 1; i++) errorHighlight << ' ';
-        for(int i = error.trace.start; i < error.trace.caret; i++) errorHighlight << '^';
+        for(int i = 0; i < error.trace.start; i++) errorHighlight << ' ';
+        for(int i = error.trace.start; i < error.trace.caret + 1; i++) errorHighlight << '^';
     }
     else
     {

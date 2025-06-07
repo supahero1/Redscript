@@ -1,0 +1,1 @@
+method: void msg(_p: selector!, _msg: string!) __inbuilt__;

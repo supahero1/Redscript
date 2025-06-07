@@ -1,0 +1,300 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "redscript",
+	"scopeName": "source.redscript",
+	"patterns": [
+
+		{
+			"include": "#comments"
+		},
+		{
+			"include": "#keywords"
+		},
+		{
+			"include": "#types"
+		},
+		{
+			"include": "#decorators"
+		},
+		{
+			"include": "#variables"
+		},
+		{
+			"include": "#operators"
+		},
+		{
+			"include": "#constants"
+		},
+		{
+			"include": "#strings"
+		},
+		{
+			"include": "#functionCalls"
+		},
+		{
+			"include": "#objectDeclarations"
+		},
+		{
+			"include": "#imports"
+		}
+	],
+	"repository": {
+		"comments": {
+			"patterns": [
+				{
+				"name": "comment.line.double-slash.redscript",
+				"match": "//.*$"
+				},
+				{
+				"name": "comment.block.redscript",
+				"begin": "/\\*",
+				"end": "\\*/"
+				}
+			]
+		},
+		"keywords": {
+			"patterns": [
+				{
+					"name": "keyword.control.redscript",
+					"match": "\\b(if|else|elif|for|while|return|as|const|method)\\b"
+				},
+				{
+					"name": "keyword.other",
+					"match": "\\b(required|optional|seperate)\\b"
+				}
+			]
+
+		},
+		"types": {
+			"patterns": [
+				{
+					"name": "storage.type.redscript",
+					"match": "\\(?\\b(int|float|string|selector|void|any|list|player)\\b\\)?[!?]?"
+				},
+				{
+					"match": "\\b(object)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+					"captures": {
+					  "1": { "name": "storage.type.redscript" },
+					  "2": { "name": "entity.name.type.redscript" }
+					}
+				},
+				{
+					"match": ":\\s+(?!int\\b|float\\b|string\\b|selector\\b|void\\b|any\\b|list\\b|object\\b)([a-zA-Z_][a-zA-Z0-9_]*)([!?])?",
+					"captures": {
+						"1": {
+							"name": "entity.name.type.redscript"
+						},
+						"2": {
+							"name": "entity.name.type.redscript"
+						}
+					}
+				}
+			]
+		},
+		"decorators": {
+			"patterns": [
+				{
+					"name": "meta.decorator.variable.redscript",
+					"match": "\\b(required|optional|seperate)\\b"
+				},
+				{
+					"name": "meta.decorator.function.redscript",
+					"match": "__inbuit__"
+				}
+			]
+		},
+		"variables": {
+			"patterns": [
+				{
+					"name": "meta.variable.declaration.redscript",
+					"begin": "(\\b(required|optional|seperate)\\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\\s*:\\s*([a-zA-Z_][a-zA-Z0-9_]*[!?]?\\s*(\\|\\s*[a-zA-Z_][a-zA-Z0-9_]*[!?]?\\s*)*)\\s*=\\s*",
+					"beginCaptures": {
+						"2": {
+							"name": "meta.decorator.variable.redscript"
+						},
+						"3": {
+							"name": "variable.other.declaration.redscript"
+						},
+						"4": {
+							"name": "storage.type.redscript"
+						}
+					},
+					"end": ";",
+					"patterns": [
+						{
+							"include": "#constants"
+						},
+						{
+							"include": "#strings"
+						},
+						{
+							"include": "#functionCalls"
+						},
+						{
+							"include": "#operators"
+						}
+					]
+				},
+				{
+					"name": "meta.variable.assignment.redscript",
+					"begin": "(\\b[a-zA-Z_][a-zA-Z0-9_]*)\\s*=\\s*",
+					"beginCaptures": {
+						"1": {
+							"name": "variable.other.assignment.redscript"
+						}
+					},
+					"end": ";",
+					"patterns": [
+						{
+							"include": "#constants"
+						},
+						{
+							"include": "#strings"
+						},
+						{
+							"include": "#functionCalls"
+						},
+						{
+							"include": "#operators"
+						}
+					]
+				}
+			]
+		},
+		"operators": {
+			"patterns": [
+				{
+					"name": "keyword.operator.arithmetic.redscript",
+					"match": "[+\\-*/%^]"
+				},
+				{
+					"name": "keyword.operator.assignment.compound.redscript",
+					"match": "[+\\-*/%^]="
+				},
+				{
+					"name": "keyword.operator.comparison.redscript",
+					"match": "==|!="
+				},
+				{
+					"name": "keyword.operator.assignment.redscript",
+					"match": "="
+				}
+			]
+		},
+		"constants": {
+			"patterns": [
+				{
+					"name": "constant.numeric.redscript",
+					"match": "\\b-?\\d+(?:_\\d+)*(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b"
+				}
+			]
+		},
+		"strings": {
+			"patterns": [
+				{
+					"name": "string.quoted.double.redscript",
+					"begin": "\"",
+					"end": "\"",
+					"patterns": [
+						{
+							"name": "constant.character.escape.redscript",
+							"match": "\\\\."
+						}
+					]
+				}
+			]
+		},
+		"functionCalls": {
+			"patterns": [
+				{
+					"name": "meta.function-call.redscript",
+					"match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()",
+					"captures": {
+						"1": {
+							"name": "entity.name.function.redscript"
+						}
+					}
+				}
+			]
+		},
+		"objectDeclarations": {
+			"patterns": [
+				{
+					"name": "meta.object.declaration.redscript",
+					"begin": "\\bobject\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*\\{",
+					"end": "\\}",
+					"patterns": [
+						{
+							"name": "meta.variable.declaration.redscript",
+							"begin": "([a-zA-Z_][a-zA-Z0-9_]*)\\s*:\\s*([a-zA-Z_][a-zA-Z0-9_]*[!?]?\\s*(\\|\\s*[a-zA-Z_][a-zA-Z0-9_]*[!?]?\\s*)*)\\s*=\\s*",
+							"beginCaptures": {
+								"1": {
+									"name": "variable.other.declaration.redscript"
+								},
+								"2": {
+									"name": "storage.type.redscript"
+								}
+							},
+							"end": ";",
+							"patterns": [
+								{
+									"include": "#constants"
+								},
+								{
+									"include": "#strings"
+								},
+								{
+									"include": "#functionCalls"
+								},
+								{
+									"include": "#operators"
+								}
+							]
+						},
+						{
+							"include": "#keywords"
+						},
+						{
+							"include": "#constants"
+						},
+						{
+							"include": "#operators"
+						},
+						{
+							"include": "#types"
+						},
+						{
+							"include": "#decorators"
+						},
+						{
+							"include": "#strings"
+						}
+					],
+					"captures": {
+						"1": {
+							"name": "entity.name.type.redscript"
+						}
+					}
+				},
+				{
+					"name": "meta.inline.object.redscript",
+					"begin": "=\\s*\\{",
+					"end": "\\}"
+				}
+			]
+		},
+		"imports": {
+			"patterns": [
+				{
+					"name": "keyword.import.redscript",
+					"match": "\\buse\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\b",
+					"captures": {
+						"1": {
+							"name": "entity.name.module.redscript"
+						}
+					}
+				}
+			]
+		}
+	}
+}

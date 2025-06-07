@@ -7,19 +7,18 @@
 #include "logger.hpp"
 
 #define RS_ERROR_LINE_PADDING 2
-
 #include "errors.hpp"
 
 struct raw_trace_info
 {
-    uint64_t at = 0, line = 0, caret = 0, nlindex = 0, start=-1;
+    long at = 0, line = 0, caret = 0, nlindex = 0, start=-1;
 };
 
 struct stack_trace
 {
     uint32_t ec = 0;
-    std::shared_ptr<uint64_t> at;
-    uint64_t line = 0, caret = 0, nlindex = 0, start=-1;
+    std::shared_ptr<long> at = nullptr;
+    long line = 1, caret = 0, nlindex = 0, start=-1;
 
     operator raw_trace_info ()
     {
@@ -34,7 +33,7 @@ struct rs_error
     template<typename... _Args>
     rs_error(const std::string& _message,
              std::string&       _content,
-             stack_trace&       _trace,
+             stack_trace        _trace,
              std::string        _fName,
              _Args&&...         _variables) :
                     content(std::make_shared<std::string>(_content)),
@@ -51,7 +50,7 @@ struct rs_error
             std::string        _fName,
             _Args&&...         _variables) :
                content(std::make_shared<std::string>(_content)),
-               trace{0, std::make_shared<size_t>(_raw.at), _raw.line, _raw.caret, _raw.nlindex, _raw.start},
+               trace{0, std::make_shared<long>(_raw.at), _raw.line, _raw.caret, _raw.nlindex, _raw.start},
                fName(_fName),
                message(std::vformat(_message, std::make_format_args(std::forward<_Args>(_variables)...)))
     {
@@ -70,7 +69,8 @@ private:
     
         while (++at < L && _content.at(at) != '\n');
     
-        line = _content.substr(trace.nlindex, at - trace.nlindex);
+        // dont append first \n and last \n to line
+        line = _content.substr(trace.nlindex > 0 ? trace.nlindex + 1 : 0, at - trace.nlindex - 1);
     }
 };
 

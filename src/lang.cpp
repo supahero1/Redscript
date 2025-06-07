@@ -6,41 +6,196 @@
         err.trace.ec = _ec;                                                                                 \
         return;                                                                                             \
     }
-
-#pragma region variables
-void rs_variable::rbc_create(rbc_program &program, rs_error &err)
-{
-    // TODO
-    // we assume all compile errors have been avoided, ex: there are no variables with duplicate names.
-    // rbc_command create(rbc_instruction::SAVE, ...);
-}
-#pragma endregion variables
-
-#pragma region expressions
 #define EXPR_ERROR(_ec, _message, _trace, ...)                                                               \
     {                                                                                                        \
         *err = rs_error(_message, *program.context->content, _trace, program.context->fName, ##__VA_ARGS__); \
         err->trace.ec = _ec;                                                                                 \
         return root;                                                                                         \
     }
-bst_operation<token> make_bst(rbc_program &program, token_list &tlist, size_t &start, rs_error *err, bool br, bool oneNode)
+#define EXPR_ERROR_R(_ec, _message, _trace, _ret, ...)                                                       \
+    {                                                                                                        \
+        *err = rs_error(_message, *program.context->content, _trace, program.context->fName, ##__VA_ARGS__); \
+        err->trace.ec = _ec;                                                                                 \
+        return _ret;                                                                                         \
+    }
+#pragma region objects
+
+std::shared_ptr<rs_object> parseInlineObject(rbc_program& program, token_list& tlist, long& start, rs_error* err)
 {
-    const size_t S = tlist.size();
+    size_t S = tlist.size();
+    rs_object obj;
+    while(start + 1 < S)
+    {
+        token& name = tlist.at(++start);
+        if (name.type == token_type::CBRACKET_CLOSED)
+            break;
+        if (name.type != token_type::WORD)
+            EXPR_ERROR_R(RS_SYNTAX_ERROR, "Unexpected token.", name.trace, nullptr);
+        if (obj.members.find(name) != obj.members.end())
+            EXPR_ERROR_R(RS_SYNTAX_ERROR, "Duplicate object field.", name.trace, nullptr);
+
+        if (start + 1 >= S)
+            break;
+        token& sep = tlist.at(++start);
+        if (sep.type != token_type::SYMBOL || sep.info != ':')
+            EXPR_ERROR_R(RS_SYNTAX_ERROR, "Expected ':'.", sep.trace, nullptr);
+
+        start++;
+
+        rs_expression value = expreval(program, tlist, start, err, false, false, true);
+        if (value.nonOperationalResult)
+            start++;
+        if (err->trace.ec)
+            return nullptr;
+
+        rs_variable var(name, program.currentScope);
+        var.value = std::make_shared<rs_expression>(value);
+        obj.members.insert({name.repr, {var, rs_object_member_decorator::OPTIONAL}});
+
+        token& terminator = tlist.at(start);
+        if (terminator.type == token_type::CBRACKET_CLOSED)
+            break;
+        if (terminator.type != token_type::SYMBOL || terminator.info != ',')
+            EXPR_ERROR_R(RS_SYNTAX_ERROR, "Expected object field seperator or '}'.", terminator.trace, nullptr);
+    }
+    if (start + 1 >= S)
+        EXPR_ERROR_R(RS_SYNTAX_ERROR, "Unterminated object definition.", tlist.back().trace, nullptr);
+
+    return std::make_shared<rs_object>(obj);
+    
+}
+
+#pragma endregion objects
+#pragma region expressions
+
+rs_expression::_ResultT rs_expression::rbc_evaluate(rbc_program& program, rs_error* err,
+                                          bst_operation<token>* node)
+{
+    using _NodeT  = bst_operation<token>;
+    using _ValueT = rbc_value;
+
+    if (nonOperationalResult)
+        return *nonOperationalResult;
+
+    if (!node) node = &operation;
+
+    const bool leftIsToken  = node->left->index();
+    const bool rightIsToken = node->right && node->right->index();
+
+
+    std::shared_ptr<_ValueT> leftVal;
+    std::shared_ptr<_ValueT> rightVal;
+
+    // an operable computation is made when the left and right parts of the node contain integer values.
+    // whether that be an integer or a variable holding an integer.
+    // a quick fix is to set this = true, letting all computations become operable (except for ones with non operable registers)
+    bool operableRegister     = true; // was false, error here. TODO fix
+
+    if (!leftIsToken)
+    {
+        auto lresult = rbc_evaluate(program, err, &std::get<_NodeT>(*node->left));
+        if (err->trace.ec)
+            return lresult;
+        if (lresult.index())
+            leftVal = std::make_shared<_ValueT>(std::get<1>(lresult));
+        else
+        {
+            sharedt<rbc_register>& reg = std::get<sharedt<rbc_register>>(lresult);
+            leftVal = std::make_shared<_ValueT>(reg);
+            operableRegister = reg->operable;
+        }
+    }else 
+    {
+        token& value = std::get<token>(*node->left);
+        std::shared_ptr<rs_variable> var;
+        if (var = program.getVariable(value))
+            leftVal = std::make_shared<_ValueT>(var);
+        else
+            leftVal = std::make_shared<_ValueT>(rbc_constant(value.type, value.repr, &value.trace));
+    }
+
+    if(!node->right)
+        return *leftVal;
+
+    if (!rightIsToken)
+    {
+        auto rresult = rbc_evaluate(program, err, &std::get<_NodeT>(*node->right));
+        if (err->trace.ec)
+            return *leftVal;
+        if(rresult.index() != 1)
+            rightVal = std::make_shared<_ValueT>(rresult);
+        else
+        {
+            sharedt<rbc_register>& reg = std::get<sharedt<rbc_register>>(rresult);
+            if (operableRegister && !reg->operable)
+                EXPR_ERROR_R(RS_UNSUPPORTED_OPERATION_ERROR,
+                    "Unsupported operation between operable and non operable register. If you see this particular message, flag an error on the github.",
+                    stack_trace(), *leftVal);
+            rightVal = std::make_shared<_ValueT>(reg);
+        }
+
+    }else 
+    {
+        token& value = std::get<token>(*node->right);
+        std::shared_ptr<rs_variable> var;
+        if (var = program.getVariable(value))
+            rightVal = std::make_shared<_ValueT>(var);
+        else
+            rightVal = std::make_shared<_ValueT>(rbc_constant(value.type, value.repr, &value.trace));
+    }
+    sharedt<rbc_register> reg = nullptr;
+    bool occupy = true;
+    if (leftVal->index() == 1)
+    {
+        reg = std::get<1>(*leftVal);
+        if (!reg->vacant) 
+        {
+            reg = program.getFreeRegister(operableRegister);
+            if (!reg)
+                reg = program.makeRegister(operableRegister);
+        } else occupy = false; // use register from prev operation to store this operation
+    }else
+    {
+        reg = program.getFreeRegister(operableRegister);
+        if (!reg)
+            reg = program.makeRegister(operableRegister);
+    }
+    if (occupy)
+        program (rbc_commands::registers::occupy(reg, *leftVal));
+    program (rbc_commands::registers::operate(reg, *rightVal, static_cast<uint>(node->operation)));
+    reg->free();
+
+    return reg;
+}
+bst_operation<token> make_bst(rbc_program &program, token_list &tlist, long &start, rs_error *err, bool br, bool oneNode, bool obj)
+{
+    const long S = tlist.size();
     bst_operation<token> root;
-    bool shouldBreak = false;
     do
     {
         token &current = tlist.at(start);
-
         switch (current.type)
         {
         case token_type::LINE_END:
             return root;
         case token_type::BRACKET_CLOSED:
+        {
             if (!br)
                 EXPR_ERROR(RS_SYNTAX_ERROR, "Unclosed bracket found.", current.trace);
-            shouldBreak = true;
-            break;
+            if (!root.left->index() && !root.right)
+            {
+                auto& node = std::get<0>(*root.left);
+                if (node.right && node.left->index() && node.right->index())
+                {
+                    // they are both tokens, and therefore dont need to be
+                    // encapsulated.
+                    root.right = node.right;
+                    root.operation = node.operation;
+                    root.left  = node.left;
+                }
+            }
+            return root;
+        }
         case token_type::BRACKET_OPEN:
         {
             bst_operation<token> child = make_bst(program, tlist, ++start, err, true, false);
@@ -49,8 +204,8 @@ bst_operation<token> make_bst(rbc_program &program, token_list &tlist, size_t &s
 
             if (!root.assignNext(child))
                 EXPR_ERROR(RS_SYNTAX_ERROR, "Missing operator.", tlist.at(start).trace);
-            start ++;
-            if (oneNode || current.type == token_type::LINE_END)
+            // start ++;
+            if (oneNode)
                 return root;
             break;
         }
@@ -85,38 +240,43 @@ bst_operation<token> make_bst(rbc_program &program, token_list &tlist, size_t &s
             else if (!root.assignNext(current))
                 EXPR_ERROR(RS_SYNTAX_ERROR, "Missing operator.", current.trace);
 
-            if (oneNode)
+            if (oneNode || (start + 1 < S && tlist.at(start + 1).type == token_type::LINE_END))
                 return root;
             break;
         }
         default:
-            EXPR_ERROR(RS_SYNTAX_ERROR, "Unexpected token in expression.", current.trace);
+            if ((current.info == ',' && (br || obj)) ||
+                (current.info == '}' && obj)         ||
+                (current.type == token_type::COMPARE_EQUAL || current.type == token_type::COMPARE_NOTEQUAL))
+            {
+                return root; // commas can end expressions in brackets
+            }
+            EXPR_ERROR(RS_SYNTAX_ERROR, "Unknown token in expression.", current.trace);
         }
         if (root.right)
         {
-            token* next;
+            token* next = nullptr;
             while (start + 1 < S && (next = &tlist.at(start + 1))->type == token_type::OPERATOR)
             {
                 if (next->repr.length() != 1) // todo remove 
                     EXPR_ERROR(RS_SYNTAX_ERROR, "Unsupported operator.", current.trace);
                 const int pLeft = operatorPrecedence(root.operation), pRight = operatorPrecedence(next->info);
 
-                
-                // shift over
                 start += 2;
                 if (start >= S)
                     EXPR_ERROR(RS_SYNTAX_ERROR, "Expected expression, not EOF.", next->trace);
                 // check if we are in a bracket, and advance to next token
                 bool isBracketNode = tlist.at(start).type == token_type::BRACKET_OPEN;
-                    
+                if (isBracketNode) start++;
+
                 if (pRight < pLeft)
                 {
                     // parse the next node only, concat root.right and new right to make more favorable node
                     bst_operation<token> right = make_bst(program, tlist, start, err, isBracketNode, true);
                     if (err->trace.ec)
                         return root;
-
                     right.right = root.right;
+                    right.setOperation(next->info);
 
                     std::swap(*right.left, *right.right);
 
@@ -125,46 +285,167 @@ bst_operation<token> make_bst(rbc_program &program, token_list &tlist, size_t &s
                 {
                     // we encapsulate root node with another node.
                     bst_operation<token> newRoot;
-                    newRoot.setOperation(pLeft);
+                    newRoot.setOperation(next->info);
                     // assign left
                     newRoot.assignNext(root);
 
-                    bst_operation<token> right = make_bst(program, tlist, start, err, isBracketNode, false);
+                    bst_operation<token> right = make_bst(program, tlist, start, err, isBracketNode, true);
                     if (err->trace.ec)
                         return root;
                     // assign right
                     newRoot.assignNext(right);
 
-                    return newRoot;
+                    root = newRoot;
                 }
+                if(isBracketNode) start++;
             }
-            return root;
+            break;
         }
-    } while (!shouldBreak && ++start < S);
+        
+        if (start < S && tlist.at(start).type == token_type::LINE_END)
+            return root;
+    } while (++start < S);
 
-    if (start == S)
+    if (start > S)
         EXPR_ERROR(RS_EOF_ERROR, "Expected expression, not EOF.", tlist.at(S - 1).trace);
 
     return root;
 }
-#undef EXPR_ERROR
-rs_expression expreval(rbc_program &program, token_list &tlist, size_t &start, rs_error *err)
+
+void prune_expr(rbc_program& program, bst_operation<token>& expr, rs_error* err)
+{
+    using _NodeT = bst_operation<token>;
+    /*
+    x = (4 + 2), +, 2
+    lt = false, rt = true
+
+        lchild = (4 + 2)
+        recur
+            x = 4, +, 2
+            lt = true, rt = true
+            left = 4
+            right = 2
+            result = 6
+
+            lcopy = 4
+            lcopy.repr = result
+            lcopy = 6
+            - makeSingular -
+                x.left = lcopy
+                x.right = nothing
+                x.operation = nothing
+                x = 6, null, null
+
+        lchild = 6, null, null
+        if isSingular
+            x.left = lchild.left
+            x = 6, +, 2
+            
+
+    */
+    bool isLeftToken  = expr.left->index();
+    
+    bool isRightToken = expr.right ? expr.right->index() : false;
+
+    
+    if (isLeftToken && isRightToken)
+    {
+        // compute
+        token& left = std::get<token>(*expr.left);
+        token& right = std::get<token>(*expr.right);
+
+        std::string result;
+        if(left.type == right.type)
+        {
+            switch (left.type)
+            {
+                case token_type::INT_LITERAL:
+                {
+                    int r  = operator_compute(std::stoi(left.repr), expr.operation, std::stoi(right.repr));
+                    result = std::to_string(r);
+                    break;
+                }
+                default:
+                    WARN("No supported operation of same type (T=%d)", static_cast<int>(left.type));
+                    break;
+            }
+        }
+        else
+        {
+            WARN("No supported operation of same type (T=%d)", static_cast<int>(left.type));
+        }
+        if(!result.empty())
+        {
+            token copy = left;
+            copy.repr = result;
+            expr.makeSingular(copy);
+        }
+
+    }
+    else
+    {
+        if(!isLeftToken)
+        {
+            _NodeT& lchild = std::get<_NodeT>(*expr.left);
+            prune_expr(program, lchild, err);
+            if (err->trace.ec)
+                return;
+            if (lchild.isSingular())
+                expr.left = std::make_shared<_NodeT::_ValueT>(std::get<token>(*lchild.left));
+        }
+        if(!isRightToken && expr.right)
+        {
+            _NodeT& rchild = std::get<_NodeT>(*expr.right);
+            prune_expr(program, rchild, err);
+            if (err->trace.ec)
+                return;
+            if (rchild.isSingular())
+                expr.right = std::make_shared<_NodeT::_ValueT>(std::get<token>(*rchild.left));
+        }
+        if (expr.left->index() && expr.right && expr.right->index())
+            prune_expr(program, expr, err);
+    }
+    
+}
+
+rs_expression expreval(rbc_program &program, token_list &tlist, long& start, rs_error *err, bool br, bool lineEnd, bool obj)
 {
     rs_expression expr;
-
-    bst_operation<token> bst = make_bst(program, tlist, start, err);
+    token& current = tlist.at(start);
+    if (current.type == token_type::CBRACKET_OPEN)
+    {
+        // parse object
+        std::shared_ptr<rs_object> obj = parseInlineObject(program, tlist, start, err);
+        if(err->trace.ec || !obj)
+            return expr;
+        expr.nonOperationalResult = std::make_shared<rbc_value>(obj);
+        return expr;
+    }
+    else if (current.type == token_type::SELECTOR_LITERAL)
+    {
+        // todo: make selector parse a function so that we can have complex selectors:
+        // @p[name=x]
+        expr.nonOperationalResult = std::make_shared<rbc_value>(rbc_constant(token_type::SELECTOR_LITERAL, current.repr));
+        return expr;
+    }
+    bst_operation<token> bst = make_bst(program, tlist, start, err, br, false, obj);
     if (err->trace.ec)
         return expr;
-
+    if (lineEnd)
+    {
+        if (start + 1 >= tlist.size())
+            EXPR_ERROR_R(RS_EOF_ERROR, "Missing semicolon.", tlist.back().trace, expr);
+        if (tlist.at(start + 1).type != token_type::LINE_END)
+            EXPR_ERROR_R(RS_EOF_ERROR, "Missing semicolon.", tlist.at(start + 1).trace, expr);
+        start++;
+    }
+    prune_expr(program, bst, err);
+    if (err->trace.ec)
+        return expr;
     expr.operation = bst;
 
-    /**
-     * Navigate to the left most expression:
-     * ((1+2)+3)+2;left most: 1+2
-     */
-
-    // TODO: prune constant branches, eg 1 + 3, or constexpr math functions like math.sin() etc.
     return expr;
 }
 #pragma endregion expressions
+#undef EXPR_ERROR
 #undef COMP_ERROR

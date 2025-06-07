@@ -3,7 +3,7 @@
 
 #define INFO(x, ...) printf("[INFO] " x "\n", ##__VA_ARGS__)
 
-#ifdef _WIN32
+#if 1
 
 #define ERROR_COLOR "\x1b[31m"
 #define ERROR_RESET "\x1b[0m"

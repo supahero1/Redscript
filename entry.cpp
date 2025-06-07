@@ -3,15 +3,68 @@
 #include "file.hpp"
 #include "logger.hpp"
 #include "rbc.hpp"
-int main(int argc, const char** argv)
+#include "config.hpp"
+int main(int argc, char* const* argv)
 {
     if (argc < 3) 
     {
         ERROR("Invalid command line arguments supplied (argc: %d).", argc);
         return EXIT_FAILURE;
     }
+#pragma region ARGS
+    char* fileName   = nullptr;
+    char* outFolder  = nullptr;
+    bool debug       = false;
+    int opt;
+    while ((opt = getopt(argc, argv, "f:o:d")) != -1)
+    {
+        switch (opt)
+        {
+            case 'd':
+                debug = true;
+                break;
+            case 'f':
+                fileName = optarg;
+                break;
+            case 'o':
+                outFolder = optarg;
+                break;
+            case '?':
+                ERROR("Unknown option: %s", optarg);
+                return 1;
+        }
+    }
 
-    const char* fileName = argv[1];
+    if (!fileName)
+    {
+        if (optind < argc)
+            fileName = argv[optind++];
+        else 
+        {
+            ERROR("Usage: %s <fname> <outfolder> <args...>", argv[0]);
+            return EXIT_FAILURE;
+        }
+    }
+    if (!outFolder)
+    {
+        if (optind < argc)
+            outFolder = argv[optind++];
+        else 
+        {
+            ERROR("Usage: %s <fname> <outfolder> <args...>", argv[0]);
+            return EXIT_FAILURE;
+        }
+    }
+
+#pragma endregion ARGS
+    rs_error error;
+
+    RS_CONFIG = readConfig(RS_CONFIG_LOCATION, &error);
+    if(error.trace.ec)
+    {
+        printerr(error);
+        return EXIT_FAILURE;
+    }
 
     std::string fContent = readFile(fileName);
 
@@ -21,7 +74,6 @@ int main(int argc, const char** argv)
         return EXIT_FAILURE;
     }
 
-    rs_error error;
     token_list list = tlex(fileName, fContent, &error);
 
     if (error.trace.ec)
@@ -29,11 +81,23 @@ int main(int argc, const char** argv)
         printerr(error);
         return EXIT_FAILURE;
     }
+    INFO("Preprocessing...");
 
-    INFO("Token Count: %d", list.size());
-    for(token t : list)
+    preprocess(list, fileName, fContent, &error);
+
+    if(error.trace.ec)
     {
-        std::cout << t.str() << std::endl;
+        printerr(error);
+        return EXIT_FAILURE;
+    }
+
+    if(debug)
+    {
+        INFO("Token Count: %d", list.size());
+        // for(token t : list)
+        // {
+        //     std::cout << t.str() << std::endl;
+        // }
     }
     
     INFO("Compiling...");
@@ -45,22 +109,41 @@ int main(int argc, const char** argv)
         printerr(error);
         return EXIT_FAILURE;
     }
+    int i = 1;
+    if (debug)
+    {
+        std::ofstream out("./out.rbc");
+        INFO("Writing global byte code to out.rbc...");
+        for(auto& function   : bytecode.functions)
+        {
+            out << function.second->toHumanStr() << '\n';
+        }
+        for(rbc_command& instruction : bytecode.globalFunction.instructions)
+        {
+            INFO("[scope: GLOBAL] [%d] %s", i, instruction.tostr().c_str());
+            out << instruction.toHumanStr() << '\n';
+            i++;
+        }
 
-    mc_program endProgram = tomc(bytecode, &error);
+        out.close();
+
+    }
+    std::string conversionError = "";
+    mc_program endProgram = tomc(bytecode, conversionError);
+
+    if (!conversionError.empty())
+    {
+        ERROR("%s", conversionError.c_str());
+        return EXIT_FAILURE;
+    }
+
+    writemc(endProgram, outFolder, &error);
 
     if (error.trace.ec)
     {
         printerr(error);
         return EXIT_FAILURE;
     }
-
-    writemc(endProgram, argv[2], &error);
-
-    if (error.trace.ec)
-    {
-        printerr(error);
-        return EXIT_FAILURE;
-    }
-    SUCCESS("Compiled successfully to %s.", argv[2]);
+    SUCCESS("Compiled successfully to %s.", outFolder);
     return EXIT_SUCCESS;
 }
