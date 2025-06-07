@@ -13,4 +13,6 @@
 #define RBC_REGISTER_PLAYER "_CPU"
 #define RBC_REGISTER_PLAYER_OBJ "alu"
 #define RBC_COMPARISON_RESULT_REGISTER "cmp"
+
+
 inline rs_config RS_CONFIG;

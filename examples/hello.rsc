@@ -5,6 +5,7 @@ object player
 {
     required health: int!;
     required name  : string!;
+
 }
 
 // causes seg fault
@@ -12,6 +13,8 @@ object player
 // {
 //    msg();
 // }
+
+minimal_player = (player) getPlayer("Gregory");
 
 y: int? = 4;
 x: player! = {health:y, name: "kristian"};

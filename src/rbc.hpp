@@ -6,10 +6,14 @@
 #include <unordered_map>
 #include <stack>
 #include <filesystem>
+#include <cstdint>
 
 struct rs_variable;
 struct rs_type_info;
 struct rs_object;
+
+typedef unsigned int uint;
+
 #include "globals.hpp"
 #include "mc.hpp"
 #include "token.hpp"

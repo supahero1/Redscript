@@ -1069,13 +1069,12 @@ mc_program tomc(rbc_program& program, std::string& err)
                 }
             }
         }
+        mcprogram.globalFunction.commands = factory.package();
     } catch (std::exception& e)
     {
         err = std::string("Internal error: ") + e.what();
         return mcprogram;
     }
-    for(auto& x : factory.package())
-        std::cout << x.body << std::endl;
     return mcprogram;
 }
 namespace conversion

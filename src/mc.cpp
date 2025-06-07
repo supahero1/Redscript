@@ -115,8 +115,35 @@ mc_command::_This mc_command::storeResult(const std::string& where)
     return store(true, where);
 }
 
-
-void writemc(mc_program&, const std::string&, rs_error*)
+#define WRITE_ERROR(ec, what) {*err=rs_error()}
+void writemc(mc_program& program, const std::string& name, const std::string& path, std::string& err)
 {
-    // TODO;
+    if (!RS_CONFIG.exists("mcpath"))
+    {
+        err = "'mcpath' doesn't exist in config. Can't write.";
+        return;
+    }
+ 
+    auto writeFunction = [&](mc_function& func, const std::filesystem::path& path)
+    {
+        std::ofstream stream(path);
+        for(auto& command : func.commands)
+            stream << command.body << '\n';
+        stream.close();
+        return true;
+    };
+
+    std::filesystem::path mcpath(RS_CONFIG.get<std::string>("mcpath"));
+    mcpath /= path;
+
+    std::filesystem::create_directory(mcpath);
+
+    std::filesystem::path to = mcpath / name;
+    if(!writeFunction(program.globalFunction, to))
+    {
+        ERROR("Could not write function to '%s'.", to.string().c_str());
+        return;
+    }
+    // TODO: other functions
+
 }

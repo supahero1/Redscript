@@ -2,3 +2,4 @@
 rscript*
 build*
 .vscode
+getopt.*

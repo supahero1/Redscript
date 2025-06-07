@@ -1,6 +1,7 @@
 #pragma once
 #include <unordered_map>
 #include <vector>
+#include <filesystem>
 #include "error.hpp"
 #include "bst.hpp"
 #include "mchelpers.hpp"
@@ -11,6 +12,8 @@
 #define MC_SCOREBOARD_CMD_ID 3
 
 #define THIS *this;
+
+typedef unsigned int uint;
 
 struct mc_command
 {
@@ -46,8 +49,8 @@ struct mc_program
     uint ifStatementDepth = 0;
     mc_command* lastIfStatement;
     std::unordered_map<std::string, mc_function> functions;
-
+    mc_function* currentFunction = nullptr;
     mc_function globalFunction;
 };
  
-void writemc(mc_program&, const std::string&, rs_error*);
+void writemc(mc_program&, const std::string&, const std::string&, std::string&);

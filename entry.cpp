@@ -1,9 +1,11 @@
 #include <iostream>
+#include <cstdint>
 #include "lexer.hpp"
 #include "file.hpp"
 #include "logger.hpp"
 #include "rbc.hpp"
 #include "config.hpp"
+#include "getopt.h"
 int main(int argc, char* const* argv)
 {
     if (argc < 3) 
@@ -136,12 +138,12 @@ int main(int argc, char* const* argv)
         ERROR("%s", conversionError.c_str());
         return EXIT_FAILURE;
     }
+    std::string packageName = std::filesystem::path(outFolder).filename().string() + ".mcfunction";
+    writemc(endProgram, packageName, outFolder, conversionError);
 
-    writemc(endProgram, outFolder, &error);
-
-    if (error.trace.ec)
+    if (!conversionError.empty())
     {
-        printerr(error);
+        ERROR("Error while writing: %s", conversionError.c_str());
         return EXIT_FAILURE;
     }
     SUCCESS("Compiled successfully to %s.", outFolder);
