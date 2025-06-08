@@ -7,3 +7,4 @@
 #define RS_ALREADY_INCLUDED_ERROR      4
 #define RS_CONFIG_ERROR                5
 #define RS_BYTE_CODE_ERROR             6
+#define RS_CPP_IMPL_ERROR              7

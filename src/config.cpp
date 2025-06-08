@@ -33,7 +33,8 @@ rs_config readConfig(const std::string& path, rs_error* err)
         std::string value;
         if (end == iter) value = "";
         else             value = content.substr(iter + 1, end - iter + 1);
-
+        if (value.back() == '\n')
+            value.pop_back();
         if (std::isdigit(value.at(0)))
         {
             try{

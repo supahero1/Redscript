@@ -116,3 +116,64 @@ method returnSomething(v: int|str?)
     return v;
 }
 ```
+
+## Selectors
+
+Selectors are annoying. Say for example:
+
+```rsc
+method: void test(x: selector!)
+{
+    msg(x, "Hello world!");
+}
+```
+
+this would compile to:
+
+
+```
+test:
+    PUSH x
+    PUSH "Hello world!"
+    CALL msg
+    POP
+PUSH @p
+CALL test
+POP
+```
+
+Although this looks like it works, there are some problems.
+
+For one, It would be nice to have variadic selectors, i.e:
+
+```
+x = "TBCMDev";
+@p[name=x]
+```
+
+And this can be accomplished through macros. Although a selector is not a function call, and macros are used in the whole mcfunction file.
+**they arent performant at all.**
+
+As well as this, passing @p to a user made function is a variable in memory. This cannot be applied to a function call like:
+```
+x = @a
+tellraw x
+```
+
+It would have to be known at compile time that it is indeed a constant, prepended with an @ in the mcfunction, and substituted using macros.
+```
+$tellraw @$(x)
+```
+
+The way to do this would be:
+
+1. During compile time, each function is given their own list of macros:
+    ```c++
+        std::unordered_map<rbc_value, std::string>
+    ```
+2. Then the compiler locates an rbc_value's (variable, constant, register, or object) usage and pastes the macro syntax + specific macro name in to where it should go in the command.
+
+3. Finally, if a function had any macros, we would call it with:
+    ```
+        function <name> with {"macro1": 12, "macro2": {...}}
+    ```

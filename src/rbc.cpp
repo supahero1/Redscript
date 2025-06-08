@@ -447,7 +447,7 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             {
                 auto& value = std::get<token>(*expr.operation.left);
 
-                rbc_value val = value.type == token_type::WORD ? program.getVariable(value.repr) : rbc_value(rbc_constant(value.type, value.repr));
+                rbc_value val = value.type == token_type::WORD ? program.getVariable(value.repr) : rbc_value(rbc_constant(value.type, value.repr, &value.trace));
                 // no need to evaluate.
                 if (needsCreation)
                     program(rbc_commands::variables::create(variable, val));
@@ -493,10 +493,17 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
     auto callparse = [&](std::string& name, bool needsTermination = true) -> bool
     {
         auto func = program.functions.find(name);
+        bool inbuilt = false;
+        bool internal = false;
         if (func == program.functions.end())
             COMP_ERROR_R(RS_SYNTAX_ERROR, "Unknown function name.", false);
         int pc = 0; // param count
         token* start = current;
+        auto& decorators = func->second->decorators;
+        if(std::find(decorators.begin(), decorators.end(), rbc_function_decorator::INBUILT) != decorators.end())
+            inbuilt = true;
+        if (std::find(decorators.begin(), decorators.end(), rbc_function_decorator::CPP) != decorators.end())
+            internal = true;
         while(current->type != token_type::BRACKET_CLOSED)
         {
             adv();
@@ -533,14 +540,14 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
         }
         if (actualpc != pc)
             COMP_ERROR_R(RS_SYNTAX_ERROR, "No matching function call with pc of {}", false, pc);
+        program(rbc_command(rbc_instruction::CALL, rbc_constant(token_type::STRING_LITERAL, name, &start->trace)));
+        if (!internal)
+            for(int i = 0; i < pc; i++)
+                program(rbc_command(rbc_instruction::POP));
 
-        program(rbc_command(rbc_instruction::CALL, rbc_constant(token_type::STRING_LITERAL, name)));
-        for(int i = 0; i < pc; i++)
-            program(rbc_command(rbc_instruction::POP));
 
         if (needsTermination && adv() && current->type != token_type::LINE_END)
             COMP_ERROR_R(RS_SYNTAX_ERROR, "Missing semi-colon.", false);
-
         return true;
     };
 #pragma endregion function_calls
@@ -829,7 +836,7 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             if (current->type != token_type::BRACKET_CLOSED)
                 COMP_ERROR(RS_SYNTAX_ERROR, "Unexpected token.");
             
-            program(rbc_command(rbc_instruction::IF, lVal, rbc_constant(compop, op.repr), rVal));
+            program(rbc_command(rbc_instruction::IF, lVal, rbc_constant(compop, op.repr, &op.trace), rVal));
             
             if (!adv())
                 COMP_ERROR(RS_EOF_ERROR, "Unexpected EOF.");
@@ -976,8 +983,10 @@ mc_program tomc(rbc_program& program, std::string& err)
     mc_program mcprogram;
     conversion::CommandFactory factory(mcprogram, program);
     try{
-        for(auto& instruction : program.globalFunction.instructions)
+        for(size_t i = 0; i < program.globalFunction.instructions.size(); i++)
         {
+
+            auto& instruction = program.globalFunction.instructions.at(i);
             const size_t size = instruction.parameters.size();
 
             switch(instruction.type)
@@ -1053,6 +1062,44 @@ mc_program tomc(rbc_program& program, std::string& err)
                 {
                     RS_ASSERT_SIZE(size > 0);
                     rbc_constant& name = std::get<rbc_constant>(*instruction.parameters.at(0));
+                    rbc_function& func = *program.functions.find(name.val)->second;
+
+                    if (std::find(func.decorators.begin(), func.decorators.end(), rbc_function_decorator::CPP) != func.decorators.end())
+                    {
+                        long caret = i;
+                        std::vector<rbc_value> parameters;
+                        rbc_command* cmd;
+                        while(--caret >= 0 && (cmd = &program.globalFunction.instructions.at(caret))->type == rbc_instruction::PUSH)
+                        {
+                            parameters.push_back(*cmd->parameters.at(0));
+                            factory.pop_back(); // remove all parsed commands to push parameters onto stack. Bad?
+                        }
+                        std::vector<rbc_value> reversed;
+                        reversed.reserve(parameters.size());
+
+                        for (auto it = parameters.rbegin(); it != parameters.rend(); ++it) {
+                            reversed.push_back(std::move(*it));
+                        }
+                        parameters = std::move(reversed);
+                        auto decl = inb_impls::INB_IMPLS_MAP.find(name.val);
+                        if (decl == inb_impls::INB_IMPLS_MAP.end())
+                        {
+                            err = "Fatal: inbuilt (__cpp__ decl) c++ function mapping for '" + name.val + "' doesn't exist. This could be due to a mismatch in versions.";
+                            return mcprogram;
+                        }
+                        decl->second(program, factory, parameters, err);
+                        if (!err.empty())
+                            return mcprogram; // todo can printerr here!!!
+                    }
+                    else
+                        factory.invoke(func);
+
+                    while (i + 1 < program.globalFunction.instructions.size() && program.globalFunction.instructions.at(i + 1).type == rbc_instruction::POP)
+                    {
+                        i++;
+                        factory.popParameter();
+                    }
+
                     // todo
                     break;
                 }
@@ -1061,11 +1108,6 @@ mc_program tomc(rbc_program& program, std::string& err)
                     RS_ASSERT_SIZE(size == 1);
                     factory.pushParameter(*instruction.parameters.at(0));
                     break;
-                }
-                case rbc_instruction::POP:
-                {
-                    RS_ASSERT_SIZE(size == 0);
-                    factory.popParameter();
                 }
             }
         }
@@ -1086,6 +1128,7 @@ namespace conversion
             case 0:
             {
                 rbc_constant& c = std::get<rbc_constant>(val);
+                c.quoteIfStr();
                 create_and_push(MC_DATA_CMD_ID, MC_STACK_PUSH_CONST(c.val));
                 break;
             }
@@ -1104,6 +1147,12 @@ namespace conversion
                 break;
             }
         }
+        return THIS;
+    }
+    CommandFactory::_This CommandFactory::invoke           (rbc_function& func)
+    {
+        // TODO: MACROS & NAMESPACES
+        create_and_push(MC_FUNCTION_CMD_ID, func.name);
         return THIS;
     }
     CommandFactory::_This CommandFactory::popParameter     ()
@@ -1125,6 +1174,7 @@ namespace conversion
             case 0:
             {
                 rbc_constant& c = std::get<0>(val);
+                c.quoteIfStr();
                 create_and_push(MC_DATA_CMD_ID, MC_VARIABLE_SET_CONST(var.comp_info.varIndex, c.val));
                 break;
             }
@@ -1140,10 +1190,11 @@ namespace conversion
             case 0:
             {
                 rbc_constant& val = std::get<rbc_constant>(value);
+                val.quoteIfStr();
                 if (reg.operable)
                     create_and_push(MC_SCOREBOARD_CMD_ID, MC_OPERABLE_REG_SET(reg.id, val.val));
                 else
-                    create_and_push(MC_DATA_CMD_ID, MC_DATA(modify, ARR_AT(RS_PROGRAM_REGISTERS, STR(reg.id)))
+                    create_and_push(MC_DATA_CMD_ID, MC_DATA(modify storage, ARR_AT(RS_PROGRAM_REGISTERS, STR(reg.id)))
                                                             PAD(set value) INS_L(val.val));
                 break;
             }
@@ -1202,7 +1253,7 @@ namespace conversion
     CommandFactory::_This CommandFactory::createVariable   (rs_variable& var)
     {
         create_and_push(MC_DATA_CMD_ID,
-                MC_DATA(modify, RS_PROGRAM_VARIABLES)
+                MC_DATA(modify storage, RS_PROGRAM_VARIABLES)
                     PAD(append value)
                 MC_VARIABLE_JSON_DEFAULT(std::to_string(var.scope),
                                         std::to_string(var.type_info.type_id))
@@ -1219,8 +1270,9 @@ namespace conversion
                 var.comp_info.varIndex = context.varStackCount++;
 
                 rbc_constant& c = std::get<0>(val);
+                c.quoteIfStr();
                 create_and_push(MC_DATA_CMD_ID,
-                    MC_DATA(modify, RS_PROGRAM_VARIABLES)
+                    MC_DATA(modify storage, RS_PROGRAM_VARIABLES)
                         PAD(append value)
                     MC_VARIABLE_JSON_VAL(c.val, std::to_string(var.scope),
                                                 std::to_string(var.type_info.type_id))
@@ -1260,6 +1312,7 @@ namespace conversion
             case 0:
             {
                 rbc_constant& c = std::get<0>(val);
+                c.quoteIfStr();
                 // we can add/subtract constants easily using scoreboard add/remove.
                 // with other operations however, we cant, and need to store this constant in the next free register.
                 

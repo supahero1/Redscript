@@ -15,9 +15,3 @@ namespace util
         return T(t);
     }
 }
-
-template<typename _T1, typename _T2>
-struct commutative
-{
-    
-};

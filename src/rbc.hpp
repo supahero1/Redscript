@@ -19,6 +19,7 @@ typedef unsigned int uint;
 #include "token.hpp"
 #include "error.hpp"
 #include "util.hpp"
+#include "inb.hpp"
 
 enum class rbc_instruction
 {
@@ -77,15 +78,22 @@ rbc_function_decorator parseDecorator(const std::string&);
 class rbc_constant
 {
 public:
+    void quoteIfStr()
+    {
+        if (val_type == token_type::STRING_LITERAL)
+            val = '"' + val + '"';
+    }
     const token_type val_type; 
     std::string       val;
     raw_trace_info* trace = nullptr;
     rbc_constant(token_type _val_type, std::string _val)
         : val_type(_val_type), val(_val)
-    {}
+    {
+    }
     rbc_constant(token_type _val_type, std::string _val, raw_trace_info* _trace)
         : val_type(_val_type), val(_val), trace(_trace)
-    {}
+    {
+    }
     inline std::string tostr()
     {
         return "(const){T=" + std::to_string(static_cast<uint>(val_type)) + ", v=" + val + '}'; 
@@ -216,13 +224,7 @@ namespace conversion
             make(c);
             commands.push_back(c);
         }
-        template<typename... Tys>
-        inline void create_and_push(Tys&&... t)
-        {
-            mc_command c(false, std::forward<Tys>(t)...);
-            make(c);
-            add(c);
-        }
+        
         _This op_reg_math(rbc_register& reg, rbc_value& val, bst_operation_type t);
         inline _This nop_reg_math(rbc_register& reg, rbc_value& val, bst_operation_type t)
         {
@@ -230,13 +232,24 @@ namespace conversion
             return THIS;
         }
     public:
-    CommandFactory(mc_program& _context, rbc_program& _rbc_compiler) : context(_context), rbc_compiler(_rbc_compiler)
+        CommandFactory(mc_program& _context, rbc_program& _rbc_compiler) : context(_context), rbc_compiler(_rbc_compiler)
         {}
+        template<typename... Tys>
+        inline void create_and_push(Tys&&... t)
+        {
+            mc_command c(false, std::forward<Tys>(t)...);
+            make(c);
+            add(c);
+        }
         inline mccmdlist& package()
         {
             for(auto& cmd : commands)
                 cmd.addroot();
             return commands;
+        }
+        inline void pop_back()
+        {
+            commands.pop_back();
         }
         void make(mc_command& in);
 
@@ -247,6 +260,8 @@ namespace conversion
         _This math          (rbc_value& lhs, rbc_value& rhs, bst_operation_type t);
         _This pushParameter (rbc_value& val);
         _This popParameter  ();
+        _This invoke        (rbc_function& func);
+
         
         static mc_command getVariableValue(rs_variable& var);
         static mc_command getRegisterValue(rbc_register& reg);

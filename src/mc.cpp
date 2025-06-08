@@ -17,6 +17,9 @@ mc_command::_This mc_command::addroot()
         case MC_SCOREBOARD_CMD_ID:
             name = "scoreboard";
             break;
+        case MC_TELLRAW_CMD_ID:
+            name = "tellraw";
+            break;
         default:
             WARN("Unknown command.");
             break;

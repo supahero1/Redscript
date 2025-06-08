@@ -10,6 +10,7 @@
 #define MC_EXEC_CMD_ID 1
 #define MC_FUNCTION_CMD_ID 2
 #define MC_SCOREBOARD_CMD_ID 3
+#define MC_TELLRAW_CMD_ID 4
 
 #define THIS *this;
 

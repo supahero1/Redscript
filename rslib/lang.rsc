@@ -1,1 +1,1 @@
-method: void msg(_p: selector!, _msg: string!) __inbuilt__;
+method: void msg(_p: selector!, _msg: string!) __inbuilt__ __cpp__;
