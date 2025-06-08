@@ -1,5 +1,0 @@
-*.exe
-rscript*
-build*
-.vscode
-getopt.*
