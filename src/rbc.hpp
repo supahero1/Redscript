@@ -253,6 +253,8 @@ namespace conversion
         }
         void make(mc_command& in);
 
+        void initProgram    ();
+
         _This copyStorage   (const std::string& dest, const std::string& src);
         _This appendStorage (const std::string& dest, const std::string& _const);
         _This createVariable(rs_variable& var);

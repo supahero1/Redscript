@@ -53,5 +53,5 @@ struct mc_program
     mc_function* currentFunction = nullptr;
     mc_function globalFunction;
 };
- 
+const std::filesystem::path makeDatapack(const std::filesystem::path&);
 void writemc(mc_program&, const std::string&, const std::string&, std::string&);

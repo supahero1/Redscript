@@ -982,6 +982,9 @@ mc_program tomc(rbc_program& program, std::string& err)
 {
     mc_program mcprogram;
     conversion::CommandFactory factory(mcprogram, program);
+    
+    factory.initProgram();
+
     try{
         for(size_t i = 0; i < program.globalFunction.instructions.size(); i++)
         {
@@ -1121,6 +1124,24 @@ mc_program tomc(rbc_program& program, std::string& err)
 }
 namespace conversion
 {
+    void                  CommandFactory::initProgram      ()
+    {
+        // ROOT
+        create_and_push(MC_DATA_CMD_ID, MC_DATA(merge storage, RS_PROGRAM_DATA_DEFAULT));
+
+        // OPERABLE REGISTERS
+        size_t operableRegisterCount = 0;
+        for(auto& reg : rbc_compiler.registers)
+        {
+            if (reg->operable)
+            {
+                create_and_push(MC_SCOREBOARD_CMD_ID, MC_CREATE_OPERABLE_REG(operableRegisterCount, "dummy"));
+                operableRegisterCount++;
+            }
+            else
+                WARN("Non operable register not created.");
+        }
+    }
     CommandFactory::_This CommandFactory::pushParameter    (rbc_value& val)
     {
         switch(val.index())
@@ -1285,7 +1306,7 @@ namespace conversion
                 // handled in create variable
                 sharedt<rbc_register>& reg = std::get<1>(val);
                 createVariable(var);
-                add( getRegisterValue(*reg).storeResult(MC_VARIABLE_VALUE_FULL(var.comp_info.varIndex), "int", 1) );
+                add( getRegisterValue(*reg).storeResult(PADR(storage) MC_VARIABLE_VALUE_FULL(var.comp_info.varIndex), "int", 1) );
                 
                 break;
             }

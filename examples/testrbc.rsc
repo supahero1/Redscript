@@ -1,7 +1,12 @@
 use lang;
-x: int = 4;
 
-z: int = x;
-y: int = x + 2;
+method: void doStuff(x: int)
+{
+    y = x * 2;
 
-msg(@p, y);
+    z: int! = y * 10;
+
+    msg(@r, z);
+}
+
+doStuff(44);

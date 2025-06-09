@@ -138,7 +138,7 @@ int main(int argc, char* const* argv)
         ERROR("%s", conversionError.c_str());
         return EXIT_FAILURE;
     }
-    std::string packageName = std::filesystem::path(outFolder).filename().string() + ".mcfunction";
+    std::string packageName = removeSpecialCharacters(std::filesystem::path(outFolder).filename().string()) + ".mcfunction";
     writemc(endProgram, packageName, outFolder, conversionError);
 
     if (!conversionError.empty())
