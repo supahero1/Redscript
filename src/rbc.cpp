@@ -83,6 +83,29 @@ std::string rbc_function::toStr()
     }
     return stream.str();
 }
+rs_variable* rbc_function::getParameterByName(const std::string& name)
+{
+    for(auto& var : localVariables)
+    {
+        if (var.second.second && name == var.second.first->name)
+            return var.second.first.get();
+    }
+    return nullptr;
+}
+rs_variable* rbc_function::getNthParameter(size_t p)
+{
+    size_t pc = 0;
+    for(auto& var : localVariables)
+    {
+        if (var.second.second)
+        {
+            if (pc == p)
+                return var.second.first.get();
+            pc++;
+        }
+    }
+    return nullptr;
+}
 std::string rbc_function::toHumanStr()
 {
     std::stringstream stream;
@@ -493,13 +516,19 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
     auto callparse = [&](std::string& name, bool needsTermination = true) -> bool
     {
         auto func = program.functions.find(name);
+        std::shared_ptr<rbc_function> function = nullptr;
         bool inbuilt = false;
         bool internal = false;
         if (func == program.functions.end())
-            COMP_ERROR_R(RS_SYNTAX_ERROR, "Unknown function name.", false);
+        {
+            if (!program.currentFunction || program.currentFunction->name != name)
+                COMP_ERROR_R(RS_SYNTAX_ERROR, "Unknown function name.", false);
+            function = program.currentFunction; // recursion not allowed
+            COMP_ERROR_R(RS_SYNTAX_ERROR, "Recursion is not supported.");
+        }else function = func->second;
         int pc = 0; // param count
         token* start = current;
-        auto& decorators = func->second->decorators;
+        auto& decorators = function->decorators;
         if(std::find(decorators.begin(), decorators.end(), rbc_function_decorator::INBUILT) != decorators.end())
             inbuilt = true;
         if (std::find(decorators.begin(), decorators.end(), rbc_function_decorator::CPP) != decorators.end())
@@ -516,7 +545,11 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             auto result = expr.rbc_evaluate(program, err);
             if(err->trace.ec)
                 return false;
-            program(rbc_command(rbc_instruction::PUSH, result));
+
+            rs_variable* param = function->getNthParameter(pc);
+            if (!param)
+                COMP_ERROR_R(RS_SYNTAX_ERROR, "No matching function call with pc of {}", false, pc);
+            program(rbc_command(rbc_instruction::PUSH, rbc_constant(token_type::STRING_LITERAL, function->name), rbc_constant(token_type::STRING_LITERAL, param->name), result));
 
             pc ++;
             if (current->info != ',' && current->type != token_type::BRACKET_CLOSED)
@@ -530,13 +563,11 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
         }
         // todo handle parameter storing better.
         int actualpc = 0;
-        for(auto& var : func->second->localVariables)
+        for(auto& var : function->localVariables)
         {
             // is param
             if (var.second.second)
-            {
                 actualpc ++;
-            }
         }
         if (actualpc != pc)
             COMP_ERROR_R(RS_SYNTAX_ERROR, "No matching function call with pc of {}", false, pc);
@@ -646,7 +677,14 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             if(current->type != token_type::BRACKET_OPEN)
                 COMP_ERROR(RS_SYNTAX_ERROR, "Expected '('.");
             
+            for(char c : name)
+            {
+                if (std::isupper(c))
+                    COMP_ERROR(RS_SYNTAX_ERROR, "Function names cannot have uppercase letters due to how minecraft functions are implemented. Only use lower case letters and underscores.");
+            }
             program.currentFunction = std::make_shared<rbc_function>(name);
+
+
             program.currentFunction->returnType = std::make_shared<rs_type_info>(retType);
             program.scopeStack.push(rbc_scope_type::FUNCTION);
             program.currentScope ++;
@@ -730,7 +768,7 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
                     // TODO: should functions have global scope access? if so, we need to keep track of when they are created.
                     // I think not.
                     program.functions.insert({program.currentFunction->name, program.currentFunction});
-                    program.currentFunction = nullptr;
+                    program.currentFunction.reset();
                     break;
                 }
                 case rbc_scope_type::IF:
@@ -975,21 +1013,20 @@ void preprocess(token_list& tokens, std::string fName, std::string& content, rs_
         }
     } while(++_At < S);
 }
-#define RS_ASSERTC(C, m) if (!(C)) {err=m;return mcprogram;}
+#define RS_ASSERTC(C, m) if (!(C)) {err=m;return {};}
 #define RS_ASSERT_SIZE(C) RS_ASSERTC(C, "Invalid byte code parameter count. This error is a bug, flag it on github.")
 #define RS_ASSERT_SUCCESS if (!err.empty()) {return mcprogram;}
-mc_program tomc(rbc_program& program, std::string& err)
+mc_program tomc(rbc_program& program, const std::string& moduleName, std::string& err)
 {
     mc_program mcprogram;
     conversion::CommandFactory factory(mcprogram, program);
     
     factory.initProgram();
-
-    try{
-        for(size_t i = 0; i < program.globalFunction.instructions.size(); i++)
+    auto parseFunction = [&](std::vector<rbc_command>& instructions) -> mccmdlist
+    {
+        for(size_t i = 0; i < instructions.size(); i++)
         {
-
-            auto& instruction = program.globalFunction.instructions.at(i);
+            auto& instruction = instructions.at(i);
             const size_t size = instruction.parameters.size();
 
             switch(instruction.type)
@@ -1017,8 +1054,10 @@ mc_program tomc(rbc_program& program, std::string& err)
                         // register
                         case 1:
                         {
-                            factory.setRegisterValue(*std::get<sharedt<rbc_register>>(reg),
-                                                      *instruction.parameters.at(1));
+                            rbc_register& regist = *std::get<sharedt<rbc_register>>(reg);
+                            regist.vacant = false;
+                            factory.setRegisterValue(regist,
+                                                    *instruction.parameters.at(1));
                             break;
                         }
                         case 2:
@@ -1072,10 +1111,11 @@ mc_program tomc(rbc_program& program, std::string& err)
                         long caret = i;
                         std::vector<rbc_value> parameters;
                         rbc_command* cmd;
-                        while(--caret >= 0 && (cmd = &program.globalFunction.instructions.at(caret))->type == rbc_instruction::PUSH)
+                        while(--caret >= 0 && (cmd = &instructions.at(caret))->type == rbc_instruction::PUSH)
                         {
-                            parameters.push_back(*cmd->parameters.at(0));
+                            parameters.push_back(*cmd->parameters.at(2));
                             factory.pop_back(); // remove all parsed commands to push parameters onto stack. Bad?
+                            mcprogram.varStackCount--;
                         }
                         std::vector<rbc_value> reversed;
                         reversed.reserve(parameters.size());
@@ -1088,16 +1128,16 @@ mc_program tomc(rbc_program& program, std::string& err)
                         if (decl == inb_impls::INB_IMPLS_MAP.end())
                         {
                             err = "Fatal: inbuilt (__cpp__ decl) c++ function mapping for '" + name.val + "' doesn't exist. This could be due to a mismatch in versions.";
-                            return mcprogram;
+                            return {};
                         }
                         decl->second(program, factory, parameters, err);
                         if (!err.empty())
-                            return mcprogram; // todo can printerr here!!!
+                            return {}; // todo can printerr here!!!
                     }
                     else
-                        factory.invoke(func);
+                        factory.invoke(moduleName, func);
 
-                    while (i + 1 < program.globalFunction.instructions.size() && program.globalFunction.instructions.at(i + 1).type == rbc_instruction::POP)
+                    while (i + 1 < instructions.size() && instructions.at(i + 1).type == rbc_instruction::POP)
                     {
                         i++;
                         factory.popParameter();
@@ -1108,13 +1148,40 @@ mc_program tomc(rbc_program& program, std::string& err)
                 }
                 case rbc_instruction::PUSH:
                 {
-                    RS_ASSERT_SIZE(size == 1);
-                    factory.pushParameter(*instruction.parameters.at(0));
+                    RS_ASSERT_SIZE(size >= 2);
+                    rbc_constant funcName = std::get<0>(*instruction.parameters.at(0));
+                    rbc_constant paramName = std::get<0>(*instruction.parameters.at(1));
+                    auto func = program.functions.find(funcName.val);
+                    // TODO: change to param index?
+                    rs_variable* param = func->second->getParameterByName(paramName.val);
+                    // TODO: add null checks here
+
+                    factory.createVariable(*param, *instruction.parameters.at(2));
+                    mcprogram.stack.push_back(param);
                     break;
                 }
             }
         }
-        mcprogram.globalFunction.commands = factory.package();
+        mccmdlist list = factory.package();
+        factory.clear();
+        return list;
+    };
+    
+    try{
+        mcprogram.globalFunction.commands = parseFunction(program.globalFunction.instructions);
+
+        for(auto& function : program.functions)
+        {
+            auto& decorators = function.second->decorators;
+            if 
+            (
+                std::find(decorators.begin(), decorators.end(), rbc_function_decorator::CPP) == decorators.end() &&
+                std::find(decorators.begin(), decorators.end(), rbc_function_decorator::INBUILT) == decorators.end()
+            ) // not inbuilt function 
+            {
+                mcprogram.functions.insert({function.first, mc_function{parseFunction(function.second->instructions)}});
+            }
+        }
     } catch (std::exception& e)
     {
         err = std::string("Internal error: ") + e.what();
@@ -1130,19 +1197,14 @@ namespace conversion
         create_and_push(MC_DATA_CMD_ID, MC_DATA(merge storage, RS_PROGRAM_DATA_DEFAULT));
 
         // OPERABLE REGISTERS
-        size_t operableRegisterCount = 0;
-        for(auto& reg : rbc_compiler.registers)
+        // todo fix. min reg count isnt calculated correctly.
+        for(size_t i = 0; i < 10; i++)
         {
-            if (reg->operable)
-            {
-                create_and_push(MC_SCOREBOARD_CMD_ID, MC_CREATE_OPERABLE_REG(operableRegisterCount, "dummy"));
-                operableRegisterCount++;
-            }
-            else
-                WARN("Non operable register not created.");
+            create_and_push(MC_SCOREBOARD_CMD_ID, MC_CREATE_OPERABLE_REG(i, "dummy"));
+            // WARN("Non operable register not created.");
         }
     }
-    CommandFactory::_This CommandFactory::pushParameter    (rbc_value& val)
+    CommandFactory::_This CommandFactory::pushParameter    (const std::string& name, rbc_value& val)
     {
         switch(val.index())
         {
@@ -1170,15 +1232,17 @@ namespace conversion
         }
         return THIS;
     }
-    CommandFactory::_This CommandFactory::invoke           (rbc_function& func)
+    CommandFactory::_This CommandFactory::invoke           (const std::string& module, rbc_function& func)
     {
         // TODO: MACROS & NAMESPACES
-        create_and_push(MC_FUNCTION_CMD_ID, func.name);
+        create_and_push(MC_FUNCTION_CMD_ID, module + ':' + func.name);
         return THIS;
     }
     CommandFactory::_This CommandFactory::popParameter     ()
     {
-        create_and_push(MC_DATA_CMD_ID, MC_DATA(remove storage, RS_PROGRAM_STACK "[-1]"));
+        rs_variable* var = context.stack.back();
+        create_and_push(MC_DATA_CMD_ID, MC_DATA(remove storage, ARR_AT(RS_PROGRAM_VARIABLES, STR(var->comp_info.varIndex))));
+        context.stack.pop_back();
         return THIS;
     }
     mc_command            CommandFactory::getRegisterValue (rbc_register& reg)
@@ -1186,6 +1250,10 @@ namespace conversion
         if (reg.operable)
             return mc_command(false, MC_SCOREBOARD_CMD_ID, MC_OPERABLE_REG_GET(reg.id));
         return mc_command(false, MC_DATA_CMD_ID, MC_NOPERABLE_REG_GET(reg.id));
+    }
+    mc_command            CommandFactory::getStackValue   (long index)
+    {
+        return mc_command(false, MC_DATA_CMD_ID, MC_GET_STACK_VALUE(index));
     }
     CommandFactory::_This CommandFactory::setVariableValue (rs_variable& var, rbc_value& val)
     {
@@ -1227,7 +1295,6 @@ namespace conversion
             case 2:
             {
                 rs_variable& var = *std::get<2>(value);
-
                 if (reg.operable)
                 {
                     mc_command cmd = CommandFactory::getVariableValue(var).storeResult(
@@ -1237,9 +1304,7 @@ namespace conversion
                     add(cmd);
                 }
                 else
-                {
                     ERROR("Unsupported! TODO FIX");
-                }
             }
         }
         return THIS;
@@ -1390,7 +1455,9 @@ namespace conversion
             {
                 rbc_register& reg = *std::get<1>(lhs);
 
-                return reg.operable ? op_reg_math(reg, rhs, op) : nop_reg_math(reg, rhs, op);
+                reg.operable ? op_reg_math(reg, rhs, op) : nop_reg_math(reg, rhs, op);
+                reg.free();
+                break;
             }
             case 2:
             {
@@ -1399,7 +1466,8 @@ namespace conversion
                     case 1:
                     {
                         rbc_register& reg  = *std::get<1>(rhs);
-                        return reg.operable ? op_reg_math(reg, lhs, op) : nop_reg_math(reg, lhs, op);
+                        reg.operable ? op_reg_math(reg, lhs, op) : nop_reg_math(reg, lhs, op);
+                        reg.free();
                     }
                     default:
                         ERROR("Constant operation is unsupported here.");
@@ -1410,6 +1478,7 @@ namespace conversion
                 ERROR("Constant operation is unsupported here.");
                 return THIS;
         }
+        return THIS;
     }
 }
 

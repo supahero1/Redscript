@@ -158,6 +158,8 @@ struct rbc_function
 
     bool hasBody = true;
 
+    rs_variable* getNthParameter(size_t p);
+    rs_variable* getParameterByName(const std::string& name);
     std::string toStr();
     std::string toHumanStr();
 };
@@ -241,11 +243,15 @@ namespace conversion
             make(c);
             add(c);
         }
-        inline mccmdlist& package()
+        inline mccmdlist package()
         {
             for(auto& cmd : commands)
                 cmd.addroot();
             return commands;
+        }
+        inline void clear()
+        {
+            commands.clear();
         }
         inline void pop_back()
         {
@@ -260,17 +266,18 @@ namespace conversion
         _This createVariable(rs_variable& var);
         _This createVariable(rs_variable& var, rbc_value& val);
         _This math          (rbc_value& lhs, rbc_value& rhs, bst_operation_type t);
-        _This pushParameter (rbc_value& val);
+        _This pushParameter (const std::string&, rbc_value& val);
         _This popParameter  ();
-        _This invoke        (rbc_function& func);
+        _This invoke        (const std::string& module, rbc_function& func);
 
         
         static mc_command getVariableValue(rs_variable& var);
         static mc_command getRegisterValue(rbc_register& reg);
+        static mc_command getStackValue   (long index);
         _This             setRegisterValue(rbc_register& reg, rbc_value& c);
         _This             setVariableValue(rs_variable& var, rbc_value& val);
     };
 }
 
 
-mc_program tomc(rbc_program&, std::string&);
+mc_program tomc(rbc_program&, const std::string&, std::string&);

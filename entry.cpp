@@ -15,7 +15,7 @@ int main(int argc, char* const* argv)
     }
 #pragma region ARGS
     char* fileName   = nullptr;
-    char* outFolder  = nullptr;
+    const char* outFolder  = nullptr;
     bool debug       = false;
     int opt;
     while ((opt = getopt(argc, argv, "f:o:d")) != -1)
@@ -93,13 +93,13 @@ int main(int argc, char* const* argv)
         return EXIT_FAILURE;
     }
 
-    if(debug)
+    if(debug || 1)
     {
         INFO("Token Count: %d", list.size());
-        // for(token t : list)
-        // {
-        //     std::cout << t.str() << std::endl;
-        // }
+        for(token t : list)
+        {
+            std::cout << t.str() << std::endl;
+        }
     }
     
     INFO("Compiling...");
@@ -112,7 +112,7 @@ int main(int argc, char* const* argv)
         return EXIT_FAILURE;
     }
     int i = 1;
-    if (debug)
+    if (debug || 1)
     {
         std::ofstream out("./out.rbc");
         INFO("Writing global byte code to out.rbc...");
@@ -131,15 +131,21 @@ int main(int argc, char* const* argv)
 
     }
     std::string conversionError = "";
-    mc_program endProgram = tomc(bytecode, conversionError);
+    std::string outFolderLower = outFolder;
+
+    toLower(outFolderLower);
+
+    // mc_program endProgram = tomc(bytecode, removeSpecialCharacters(outFolderLower), conversionError);
+    mc_program endProgram = tomc(bytecode, "redscript", conversionError);
 
     if (!conversionError.empty())
     {
         ERROR("%s", conversionError.c_str());
         return EXIT_FAILURE;
     }
-    std::string packageName = removeSpecialCharacters(std::filesystem::path(outFolder).filename().string()) + ".mcfunction";
-    writemc(endProgram, packageName, outFolder, conversionError);
+    
+    std::string packageName = removeSpecialCharacters(std::filesystem::path(outFolder).filename().string());
+    writemc(endProgram, packageName, outFolderLower, conversionError);
 
     if (!conversionError.empty())
     {

@@ -6,6 +6,9 @@ mc_command::_This mc_command::addroot()
 
     switch (cmd)
     {
+    case MC_KILL_CMD_ID:
+        name = "kill";
+        break;
     case MC_EXEC_CMD_ID:
         name = "execute";
         break;
@@ -137,14 +140,15 @@ const std::filesystem::path makeDatapack(const std::filesystem::path& path)
 
     return funcDir;
 }
-#define WRITE_ERROR(ec, what) { *err = rs_error()}
-void writemc(mc_program &program, const std::string &name, const std::string &path, std::string &err)
+void writemc(mc_program &program, std::string name, const std::string &path, std::string &err)
 {
     if (!RS_CONFIG.exists("mcpath"))
     {
         err = "'mcpath' doesn't exist in config. Can't write.";
         return;
     }
+    
+    toLower(name);
 
     auto writeFunction = [&](mc_function &func, const std::filesystem::path &path)
     {
@@ -157,17 +161,29 @@ void writemc(mc_program &program, const std::string &name, const std::string &pa
     try
     {
         std::filesystem::path mcpath(RS_CONFIG.get<std::string>("mcpath"));
+        if(!name.ends_with(".mcfunction"))
+            name += ".mcfunction";
         const std::filesystem::path safeName = removeSpecialCharacters(name);
-
-        mcpath = mcpath/path/MC_DATAPACK_FOLDER/(safeName.stem());
-
+        mcpath = mcpath/path;
+        if (!std::filesystem::exists(mcpath))
+        {
+            err = std::format("The Minecraft world located at '{}' doesn't exist.", mcpath.string());
+            return;
+        }
+        mcpath /= MC_DATAPACK_FOLDER/(safeName.stem());
         const std::filesystem::path funcPath = makeDatapack(mcpath);
 
         std::filesystem::path to = funcPath/safeName;
         if (!writeFunction(program.globalFunction, to))
         {
-            ERROR("Could not write function to '%s'.", to.string().c_str());
+        _error:
+            err = std::format("Could not write function to '{}'.", to.string());
             return;
+        }
+        for(auto& function : program.functions)
+        {
+            if (!writeFunction(function.second, (to = funcPath/(function.first + ".mcfunction"))))
+                goto _error;
         }
         // TODO: other functions
     }catch(std::exception& error)

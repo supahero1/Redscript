@@ -83,7 +83,7 @@ token_list tlex(const std::string &fName, std::string &content, rs_error *err = 
             if (_At == S)
                 LEX_ERRORF(RS_SYNTAX_ERROR, "Unterminated string-literal.", start);
 
-            tokens.push_back(token{content.substr(start, _At - start - 1), token_type::STRING_LITERAL, 0, trace, start});
+            tokens.push_back(token{content.substr(start, _At - start), token_type::STRING_LITERAL, 0, trace, start});
         }
         else if (std::isdigit(ch))
         {

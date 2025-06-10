@@ -1,12 +1,13 @@
 use lang;
 
-method: void doStuff(x: int)
+method: void dostuff(x: int)
 {
     y = x * 2;
 
-    z: int! = y * 10;
+    z: int! = y * 400;
 
     msg(@r, z);
 }
-
-doStuff(44);
+msg(@r, "§4You are stupid!");
+dostuff(44);
+msg(@r, "DONE");

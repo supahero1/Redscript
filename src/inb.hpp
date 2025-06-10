@@ -20,8 +20,11 @@ struct rbc_program;
 namespace inb_impls
 {
     void msg(INB_IMPL_PARAMETERS);
+    void kill(INB_IMPL_PARAMETERS);
+
     inline std::unordered_map<std::string, void(*)(INB_IMPL_PARAMETERS)> INB_IMPLS_MAP = 
     {
-        {"msg", msg}
+        {"msg", msg},
+        {"kill", kill}
     };
 };

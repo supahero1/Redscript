@@ -11,10 +11,12 @@
 #define MC_FUNCTION_CMD_ID 2
 #define MC_SCOREBOARD_CMD_ID 3
 #define MC_TELLRAW_CMD_ID 4
+#define MC_KILL_CMD_ID 5
 
 #define THIS *this;
 
 typedef unsigned int uint;
+struct rs_variable;
 
 struct mc_command
 {
@@ -51,7 +53,9 @@ struct mc_program
     mc_command* lastIfStatement;
     std::unordered_map<std::string, mc_function> functions;
     mc_function* currentFunction = nullptr;
+    // parameter name: parameter id
+    std::vector<rs_variable*> stack;
     mc_function globalFunction;
 };
 const std::filesystem::path makeDatapack(const std::filesystem::path&);
-void writemc(mc_program&, const std::string&, const std::string&, std::string&);
+void writemc(mc_program&, std::string, const std::string&, std::string&);

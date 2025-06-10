@@ -14,7 +14,7 @@ namespace inb_impls
         if (selector.index() != 0)
         {
         fail:
-            IMPL_ERROR("Expected selector as argument 1 for candidate (tellraw) impl::msg.");
+            IMPL_ERROR("Expected selector as argument 0 for candidate (tellraw) impl::msg.");
         }
         rbc_constant& _const = std::get<0>(selector);
         if (_const.val_type != token_type::SELECTOR_LITERAL)
@@ -45,5 +45,19 @@ namespace inb_impls
                 IMPL_ERROR("tellraw does not accept these parameter types in this version.");
         }
         
+    }
+    void kill(rbc_program& program, conversion::CommandFactory& factory, std::vector<rbc_value>& parameters, std::string& err)
+    {
+        rbc_value& selector = parameters.at(0);
+        if (selector.index() != 0)
+        {
+        fail:
+            IMPL_ERROR("Expected selector as argument 0 for candidate (tellraw) impl::msg.");
+        }
+        rbc_constant& _const = std::get<0>(selector);
+        if (_const.val_type != token_type::SELECTOR_LITERAL)
+            goto fail;
+
+        factory.create_and_push(MC_KILL_CMD_ID, MC_KILL(_const.val));
     }
 }

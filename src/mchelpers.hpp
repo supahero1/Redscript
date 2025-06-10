@@ -40,11 +40,14 @@
 #pragma region operable_math
 #define MC_REG_INCREMENT_CONST(id, x) PADR(players) PADR(add) MC_OPERABLE_REG(INS(STR(id))) SEP INS_L(x)
 #define MC_REG_DECREMENT_CONST(id, x) PADR(players) PADR(remove) MC_OPERABLE_REG(INS(STR(id))) SEP INS_L(x)
-#define MC_REG_OPERATE(lh_id, op_str, rh_id) PADR(players) MC_OPERABLE_REG(INS(STR(lh_id))) PAD(operation) INS(op_str) SEP MC_OPERABLE_REG(INS_L(STR(rh_id)))
+#define MC_REG_OPERATE(lh_id, op_str, rh_id) PADR(players) PADR(operation) MC_OPERABLE_REG(INS(STR(lh_id))) SEP INS(op_str) SEP MC_OPERABLE_REG(INS_L(STR(rh_id)))
 #pragma endregion operable_math
 
 #pragma region stack
 #define MC_STACK_PUSH_CONST(x) MC_DATA(modify storage, RS_PROGRAM_STACK) PAD(append value) INS_L(x)
+#define MC_STACK_AT(id) ARR_AT(RS_PROGRAM_STACK, STR(id))
+#define MC_GET_STACK_VALUE(id) MC_DATA(get storage, MC_STACK_AT(id))
+
 #pragma endregion stack
 
 #pragma region tellraw
@@ -59,3 +62,8 @@
 #pragma region mcmeta
 #define MC_MCMETA_CONTENT(version) "{\"pack\": {\"pack_format\": " INS(STR(version)) ", \"description\": \"A program created by redscript.\"}}"
 #pragma endregion mcmeta
+
+
+#pragma region inbuilt
+#define MC_KILL(selector) '@' + selector
+#pragma endregion inbuilt
