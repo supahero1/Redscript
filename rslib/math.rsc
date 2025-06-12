@@ -4,5 +4,5 @@ object location
     y: float!;
     z: float!;
 }
-OR
-type location = float[3]!;
+// OR
+// type location = float[3]!;

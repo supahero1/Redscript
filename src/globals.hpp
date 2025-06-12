@@ -15,8 +15,8 @@
 #define RBC_COMPARISON_RESULT_REGISTER "cmp"
 #define MC_DATAPACK_FOLDER "datapacks"
 #define MC_MCMETA_FILE_NAME "pack.mcmeta"
+#define MC_TEMP_STORAGE_NAME "temp"
 
-
-#define RS_PROGRAM_DATA_DEFAULT "{\"" RS_PROGRAM_VARIABLES "\":[], \"" RS_PROGRAM_REGISTERS "\":[], \"" RS_PROGRAM_DATA "\":{}, \"" RS_PROGRAM_STACK "\":[]}"
+#define RS_PROGRAM_DATA_DEFAULT "{\"" RS_PROGRAM_VARIABLES "\":[], \"" RS_PROGRAM_REGISTERS "\":[], \"" RS_PROGRAM_DATA "\":{}, \"" RS_PROGRAM_STACK "\":[], \"temp\": 0}"
 
 inline rs_config RS_CONFIG;

@@ -524,7 +524,7 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             if (!program.currentFunction || program.currentFunction->name != name)
                 COMP_ERROR_R(RS_SYNTAX_ERROR, "Unknown function name.", false);
             function = program.currentFunction; // recursion not allowed
-            COMP_ERROR_R(RS_SYNTAX_ERROR, "Recursion is not supported.");
+            COMP_ERROR_R(RS_SYNTAX_ERROR, "Recursion is not supported.", false);
         }else function = func->second;
         int pc = 0; // param count
         token* start = current;
@@ -854,10 +854,10 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             if(err->trace.ec)
                 return program;
             
-            resync();
+            adv();
+
             token& op         = *current;
             token_type compop = op.type;   
-            resync();
             if(compop != token_type::COMPARE_EQUAL && compop != token_type::COMPARE_NOTEQUAL)
                 COMP_ERROR(RS_SYNTAX_ERROR, "Unexpected token.");
 
@@ -873,7 +873,6 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             resync();
             if (current->type != token_type::BRACKET_CLOSED)
                 COMP_ERROR(RS_SYNTAX_ERROR, "Unexpected token.");
-            
             program(rbc_command(rbc_instruction::IF, lVal, rbc_constant(compop, op.repr, &op.trace), rVal));
             
             if (!adv())
@@ -1160,6 +1159,125 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                     mcprogram.stack.push_back(param);
                     break;
                 }
+                case rbc_instruction::IF:
+                {
+                    RS_ASSERT_SIZE(size == 3);
+
+                    rbc_value& lhs = *instruction.parameters.at(0);
+                    rbc_constant& op = std::get<0>(*instruction.parameters.at(1));
+                    bool eq = op.val == "==";
+                    rbc_value& rhs = *instruction.parameters.at(2);
+
+                    // commutative check, as no values are modified
+                    if (lhs.index() == rhs.index())
+                    {
+                        switch(lhs.index())
+                        {
+                            case 0:
+                            {
+                                // two constants.
+                                WARN("Comparing two constants is not good practice.");
+                                break;
+                            }
+                            case 1:
+                            {
+                                // two registers
+                                rbc_register& reg  = *std::get<1>(lhs);
+                                rbc_register& reg2 = *std::get<1>(rhs);
+
+                                if ((reg.operable && !reg2.operable) || (!reg.operable && reg2.operable))
+                                {
+                                    // store result in storage and compare
+                                    rbc_register& operable =  reg2.operable ? reg2 : reg;
+                                    rbc_register& noperable = reg2.operable ? reg  : reg2; 
+                                    factory.add( factory.getRegisterValue(noperable).storeResult(PADR(scoreboard) MC_TEMP_SCOREBOARD_STORAGE) );
+
+                                    factory.compare("score", MC_OPERABLE_REG_GET(operable.id), eq, MC_TEMP_SCOREBOARD_STORAGE);
+                                }
+                                // both are either operable or not operable
+                                else if (reg.operable)
+                                    factory.compare("score", MC_OPERABLE_REG_GET(reg.id), eq, MC_OPERABLE_REG_GET(reg2.id));
+                                else 
+                                    factory.compare("data", MC_NOPERABLE_REG_GET(reg.id), eq, MC_NOPERABLE_REG_GET(reg2.id));
+                                break;
+                            }
+                            case 2:
+                            {
+                                rs_variable& var  = *std::get<2>(lhs);
+                                rs_variable& var2 = *std::get<2>(rhs);
+
+                                factory.compare("data", RS_PROGRAM_STORAGE SEP MC_VARIABLE_VALUE(var.comp_info.varIndex), eq,
+                                                        RS_PROGRAM_STORAGE SEP MC_VARIABLE_VALUE(var.comp_info.varIndex));
+
+                                break;
+                            }
+                            default:
+                                WARN("Unimplemented comparison.");
+                        }
+                    }
+                    else
+                    {
+                        {
+                        result_pair<sharedt<rbc_register>, rbc_constant> res = 
+                            commutativeVariantEquals<sharedt<rbc_register>, rbc_constant, rbc_value>(1, lhs, 0, rhs);
+                        if (res)
+                        {
+                            rbc_register& reg = *(*res.i1);
+                            rbc_constant& con =   *res.i2;
+
+                            if (reg.operable)
+                            {
+                                factory.create_and_push(MC_DATA_CMD_ID, MC_TEMP_STORAGE_SCOREBOARD_SET_CONST(con.val));
+                                factory.compare("score", MC_OPERABLE_REG_GET(reg.id), eq, MC_TEMP_SCOREBOARD_STORAGE);
+                            }
+                            else
+                            {
+                                factory.create_and_push(MC_DATA_CMD_ID, MC_TEMP_STORAGE_SET_CONST(con.val));
+                                factory.compare("data", MC_NOPERABLE_REG_GET(reg.id), eq, MC_TEMP_STORAGE);
+                            }
+                            break;
+                        }
+                        }
+                        {
+                        result_pair<sharedt<rbc_register>, sharedt<rs_variable>> res = 
+                            commutativeVariantEquals<sharedt<rbc_register>, sharedt<rs_variable>, rbc_value>(1, lhs, 2, rhs);
+
+                        if (res)
+                        {
+                            rbc_register& reg = *(*res.i1);
+                            rs_variable&  var = *(*res.i2);
+
+                            if (reg.operable)
+                                factory.getRegisterValue(reg).storeResult(PADR(storage) MC_TEMP_STORAGE, "int", 1);
+                            else
+                                factory.copyStorage(MC_TEMP_STORAGE, MC_NOPERABLE_REG_GET(reg.id));
+                            factory.compare("data", MC_VARIABLE_VALUE_FULL(var.comp_info.varIndex), eq, MC_TEMP_STORAGE);
+                            break;
+                        }
+                        }
+                        {
+                        result_pair<sharedt<rs_variable>, rbc_constant> res = 
+                            commutativeVariantEquals<sharedt<rs_variable>, rbc_constant, rbc_value>(2, lhs, 0, rhs);
+
+                        if (res)
+                        {
+                            rs_variable&  var = *(*res.i1);
+                            rbc_constant& con = *res.i2;
+                            
+                            factory.create_and_push(MC_DATA_CMD_ID, MC_TEMP_STORAGE_SET_CONST(con.val));
+                            factory.compare("data", MC_VARIABLE_VALUE_FULL(var.comp_info.varIndex), eq, MC_TEMP_STORAGE);
+                            break;
+                        }
+                        }
+                    }
+                    break;
+                }
+                case rbc_instruction::ELSE:
+                {
+                    mcprogram.currentBlockID = 1;
+                    // todo
+                    break;
+                }
             }
         }
         mccmdlist list = factory.package();
@@ -1198,6 +1316,7 @@ namespace conversion
 
         // OPERABLE REGISTERS
         // todo fix. min reg count isnt calculated correctly.
+        create_and_push(MC_SCOREBOARD_CMD_ID, "objectives add temp dummy \"temp\"");
         for(size_t i = 0; i < 10; i++)
         {
             create_and_push(MC_SCOREBOARD_CMD_ID, MC_CREATE_OPERABLE_REG(i, "dummy"));
@@ -1251,7 +1370,7 @@ namespace conversion
             return mc_command(false, MC_SCOREBOARD_CMD_ID, MC_OPERABLE_REG_GET(reg.id));
         return mc_command(false, MC_DATA_CMD_ID, MC_NOPERABLE_REG_GET(reg.id));
     }
-    mc_command            CommandFactory::getStackValue   (long index)
+    mc_command            CommandFactory::getStackValue    (long index)
     {
         return mc_command(false, MC_DATA_CMD_ID, MC_GET_STACK_VALUE(index));
     }
@@ -1313,15 +1432,70 @@ namespace conversion
     {
         return mc_command(false, MC_DATA_CMD_ID, MC_GET_VARIABLE_VALUE(var.comp_info.varIndex));
     }
+    CommandFactory::_This CommandFactory::compare          (const std::string& locationType,
+                                                            const std::string& lhs,
+                                                            const bool eq,
+                                                            const std::string& rhs)
+    {
+        std::shared_ptr<comparison_register> reg = context.getFreeComparisonRegister();
+
+        if (!reg)
+        {
+            comparison_register _new;
+            size_t id = context.comparisonRegisters.size();
+
+            _new.id = id;
+            context.comparisonRegisters.push_back(std::make_shared<comparison_register>(_new));
+
+            reg = context.comparisonRegisters[id];
+        }
+
+        reg->vacant = false;
+        context.currentBlockID = 0;
+
+        // TODO
+        comparison_operation_type operation = eq ? comparison_operation_type::EQ : comparison_operation_type::NEQ;
+        reg->operation = operation;
+
+        create_and_push(MC_SCOREBOARD_CMD_ID, MC_COMPARE_RESET(reg->id));
+        mc_command m{false, MC_EXEC_CMD_ID, PADR(players set) MC_COMPARE_REG_GET_RAW(INS(STR(reg->id))) PADL(1)};
+        if (locationType == "data")
+        {
+            m.ifcmp(PADR(storage ) INS_L(lhs),
+                operation, reg->id,
+                    PADR(storage ) INS_L(rhs));
+        }
+        else if (locationType == "score")
+        {
+            m.ifint(lhs, operation, reg->id, rhs);
+        }
+        else
+            WARN("Unknown comparison operation flag.");
+
+        // store result
+        add(m);
+        context.lastComparison = reg;
+
+
+        return THIS;
+
+    }
+
     void                  CommandFactory::make             (mc_command& cmd)
     {
-        if (!context.lastIfStatement)
+        if (!context.lastComparison)
             return;
-        else
+
+        if (!cmd.isexec())
         {
-            // depending if last comparison was == or !=
-            // TODO
+            cmd.addroot();
+            cmd.cmd = MC_EXEC_CMD_ID;
         }
+        if (context.currentBlockID == 0)
+            cmd.ifcmpreg(comparison_operation_type::EQ, context.lastComparison->id);
+        else if (context.currentBlockID == 1)
+            cmd.ifcmpreg(comparison_operation_type::NEQ, context.lastComparison->id);
+        // etc...
 
     }
     CommandFactory::_This CommandFactory::appendStorage    (const std::string& dest, const std::string& _const)

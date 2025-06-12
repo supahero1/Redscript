@@ -36,8 +36,9 @@ struct mc_command
     _This storeResult(const std::string& where);
     _This storeSuccess(const std::string& where);
 
-    _This ifcmpreg(comparison_operation_type t);
-    _This ifint   (const std::string& lhs, comparison_operation_type t, const std::string& rhs, bool negate = false);
+    _This ifcmpreg(comparison_operation_type t, int id);
+    _This ifcmp(const std::string& lhs, comparison_operation_type t, int id, const std::string& rhs, bool negate = false);
+    _This ifint   (const std::string& lhs, comparison_operation_type t, int id, const std::string& rhs, bool negate = false);
 };
 
 typedef std::vector<mc_command> mccmdlist;
@@ -45,17 +46,31 @@ struct mc_function
 {
     std::vector<mc_command> commands;
 };
+struct comparison_register
+{
+    uint id;
+    bool vacant = true;
+    comparison_operation_type operation = comparison_operation_type::EQ;
+    inline void free()
+    {
+        vacant = true;
+    }
 
+};
 struct mc_program
 {
     uint varStackCount = 0;
-    uint ifStatementDepth = 0;
-    mc_command* lastIfStatement;
+    std::shared_ptr<comparison_register> lastComparison = nullptr;
+    uint currentBlockID; // 0: if, 1: elif, 2: else, 3:...
+    std::vector<std::shared_ptr<comparison_register>> comparisonRegisters;
     std::unordered_map<std::string, mc_function> functions;
     mc_function* currentFunction = nullptr;
     // parameter name: parameter id
     std::vector<rs_variable*> stack;
     mc_function globalFunction;
+
+    std::shared_ptr<comparison_register> getFreeComparisonRegister();
+    
 };
 const std::filesystem::path makeDatapack(const std::filesystem::path&);
 void writemc(mc_program&, std::string, const std::string&, std::string&);

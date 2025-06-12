@@ -28,10 +28,12 @@
 #pragma endregion variables
 
 #pragma region registers
+#define MC_COMPARE_REG(id) "cmp" INS_L(STR(id))
 #define MC_OPERABLE_REG_RAW(id) "r" id
 #define MC_OPERABLE_REG(id) RBC_REGISTER_PLAYER SEP MC_OPERABLE_REG_RAW(id)
 #define MC_CREATE_OPERABLE_REG(id, criteria) PADR(objectives add) MC_OPERABLE_REG_RAW(INS(STR(id))) SEP criteria SEP "\"" INS(STR(id)) "\""
-#define MC_COMPARE_REG_GET PADR(players) PADR(get) RBC_REGISTER_PLAYER SEP RBC_COMPARISON_RESULT_REGISTER
+#define MC_COMPARE_REG_GET(id) PADR(players) PADR(get) RBC_REGISTER_PLAYER SEP RBC_COMPARISON_RESULT_REGISTER INS_L(STR(id))
+#define MC_COMPARE_REG_SET(id, val) PADR(players) PADR(set) RBC_REGISTER_PLAYER SEP RBC_COMPARISON_RESULT_REGISTER INS(STR(id)) SEP val
 #define MC_OPERABLE_REG_SET(id, v) PADR(players) PADR(set) MC_OPERABLE_REG(INS(STR(id))) SEP INS_L(v)
 #define MC_OPERABLE_REG_GET(id) PADR(players) PADR(get) MC_OPERABLE_REG(INS_L(STR(id)))
 #define MC_NOPERABLE_REG_GET(id) MC_DATA(get storage, ARR_AT(RS_PROGRAM_REGISTERS, STR(id)))
@@ -54,7 +56,7 @@
 #define MC_TELLRAW_CONST(selector, val) '@' INS(selector) SEP INS_L(val)
 
 // DONT USE: not finished
-#define MC_TELLRAW_OPERABLE_REGISTER(selector, id) '@' INS(selector) SEP "[{\"score\":{" MC_OPERABLE_REG() ".value}, {\"storage\":\"" RS_PROGRAM_DATA "\"}"
+#define MC_TELLRAW_OPERABLE_REGISTER(selector, id) '@' INS(selector) SEP "[{\"score\":{" MC_OPERABLE_REG(id) ".value}, {\"storage\":\"" RS_PROGRAM_DATA "\"}"
 // for tellraw in particular a function needs to be made. Coming in next version.
 #define MC_TELLRAW_VARIABLE(selector, id) '@' INS(selector) SEP "[{\"nbt\":\"" ARR_AT(RS_PROGRAM_VARIABLES, STR(id))".value\", \"storage\":\"" RS_PROGRAM_STORAGE "\"}]"
 #pragma endregion tellraw
@@ -67,3 +69,17 @@
 #pragma region inbuilt
 #define MC_KILL(selector) '@' + selector
 #pragma endregion inbuilt
+
+#pragma region conditionals
+#define MC_COMPARE_REG_GET_RAW(id) RBC_REGISTER_PLAYER SEP RBC_COMPARISON_RESULT_REGISTER id
+#define MC_COMPARE_RESET(id) MC_COMPARE_REG_SET(id, "0")
+#define MC_COMPARE_EQ(id, lhs, rhs) op PAD(data) lhs SEP rhs PAD(run scoreboard) MC_COMPARE_REG_SET(id, "1")
+#define MC_COMPARE_NEQ(id, lhs, rhs) op PAD(data) lhs SEP rhs PAD(run scoreboard) MC_COMPARE_REG_SET(id, "0")
+#pragma endregion conditionals
+
+#pragma region temporary_storage
+#define MC_TEMP_STORAGE RS_PROGRAM_STORAGE SEP MC_TEMP_STORAGE_NAME
+#define MC_TEMP_SCOREBOARD_STORAGE RBC_REGISTER_PLAYER SEP MC_TEMP_STORAGE_NAME
+#define MC_TEMP_STORAGE_SET_CONST(val) MC_DATA(set storage, MC_TEMP_STORAGE) PAD(set value) INS_L(val)
+#define MC_TEMP_STORAGE_SCOREBOARD_SET_CONST(val) PADR(players set) MC_TEMP_SCOREBOARD_STORAGE SEP INS_L(val)
+#pragma endregion temporary_storage

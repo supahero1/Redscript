@@ -221,11 +221,7 @@ namespace conversion
         mccmdlist commands;
         mc_program& context;
         rbc_program& rbc_compiler;
-        inline void add(mc_command& c)
-        { 
-            make(c);
-            commands.push_back(c);
-        }
+        
         
         _This op_reg_math(rbc_register& reg, rbc_value& val, bst_operation_type t);
         inline _This nop_reg_math(rbc_register& reg, rbc_value& val, bst_operation_type t)
@@ -236,11 +232,15 @@ namespace conversion
     public:
         CommandFactory(mc_program& _context, rbc_program& _rbc_compiler) : context(_context), rbc_compiler(_rbc_compiler)
         {}
+        inline void add(mc_command& c)
+        { 
+            make(c);
+            commands.push_back(c);
+        }
         template<typename... Tys>
         inline void create_and_push(Tys&&... t)
         {
             mc_command c(false, std::forward<Tys>(t)...);
-            make(c);
             add(c);
         }
         inline mccmdlist package()
@@ -261,16 +261,15 @@ namespace conversion
 
         void initProgram    ();
 
-        _This copyStorage   (const std::string& dest, const std::string& src);
-        _This appendStorage (const std::string& dest, const std::string& _const);
-        _This createVariable(rs_variable& var);
-        _This createVariable(rs_variable& var, rbc_value& val);
-        _This math          (rbc_value& lhs, rbc_value& rhs, bst_operation_type t);
-        _This pushParameter (const std::string&, rbc_value& val);
-        _This popParameter  ();
-        _This invoke        (const std::string& module, rbc_function& func);
-
-        
+        _This copyStorage    (const std::string& dest, const std::string& src);
+        _This appendStorage  (const std::string& dest, const std::string& _const);
+        _This createVariable (rs_variable& var);
+        _This createVariable (rs_variable& var, rbc_value& val);
+        _This math           (rbc_value& lhs, rbc_value& rhs, bst_operation_type t);
+        _This pushParameter  (const std::string&, rbc_value& val);
+        _This popParameter   ();
+        _This invoke         (const std::string& module, rbc_function& func);
+        _This compare        (const std::string& locationType, const std::string& lhs, const bool eq, const std::string& rhs);
         static mc_command getVariableValue(rs_variable& var);
         static mc_command getRegisterValue(rbc_register& reg);
         static mc_command getStackValue   (long index);

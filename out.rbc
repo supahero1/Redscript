@@ -1,6 +1,14 @@
-redtext:
 kill:
 msg:
-PUSH (const){T=1, v=redtext}, (const){T=1, v=arg}, (const){T=1, v=Hello world!}
-CALL (const){T=1, v=redtext}
-POP 
+CREATE {{x, 0, 0, 1}, name=x, scope=0, typeinf=1, (g=1, c=0)}, (const){T=2, v=4}
+SAVE (reg){(id=0) op=1, vacant=1}, {{x, 0, 0, 1}, name=x, scope=0, typeinf=1, (g=1, c=0)}
+MATH (reg){(id=0) op=1, vacant=1}, (const){T=2, v=2}, (const){T=2, v=4}
+IF (reg){(id=0) op=1, vacant=1}, (const){T=18, v===}, (const){T=2, v=0}
+PUSH (const){T=1, v=msg}, (const){T=1, v=_msg}, (const){T=6, v=r}
+PUSH (const){T=1, v=msg}, (const){T=1, v=_p}, (const){T=1, v=X is even.}
+CALL (const){T=1, v=msg}
+ELSE
+PUSH (const){T=1, v=msg}, (const){T=1, v=_msg}, (const){T=6, v=r}
+PUSH (const){T=1, v=msg}, (const){T=1, v=_p}, (const){T=1, v=X is odd.}
+CALL (const){T=1, v=msg}
+ENDIF

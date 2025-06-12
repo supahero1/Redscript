@@ -31,21 +31,49 @@ mc_command::_This mc_command::addroot()
     body = name + ' ' + body;
     return THIS;
 }
-mc_command::_This mc_command::ifcmpreg(comparison_operation_type t)
+mc_command::_This mc_command::ifcmpreg(comparison_operation_type t, int rid)
 {
     if (!isexec())
     {
         addroot();
         cmd = MC_EXEC_CMD_ID;
     }
-    if (t != comparison_operation_type::EQ || t != comparison_operation_type::NEQ)
+    if (t != comparison_operation_type::EQ && t != comparison_operation_type::NEQ)
         WARN("Performing undefined operation on comparison register. Defaulting to neq.");
     bool eq = t == comparison_operation_type::EQ;
     std::string s = t == comparison_operation_type::EQ ? "if" : "unless";
-    body = s + SEP "score" SEP RBC_REGISTER_PLAYER SEP RBC_COMPARISON_RESULT_REGISTER + body;
+    body = s + " score " MC_COMPARE_REG_GET_RAW(INS_L(STR(rid))) + " = 1 " + body;
     return THIS;
 }
-mc_command::_This mc_command::ifint(const std::string &lhs, comparison_operation_type t, const std::string &rhs, bool negate)
+mc_command::_This mc_command::ifcmp(const std::string& lhs, comparison_operation_type t, int id, const std::string& rhs, bool negate)
+{
+    using T = comparison_operation_type;
+    if (!isexec())
+    {
+        addroot();
+        cmd = MC_EXEC_CMD_ID;
+    }
+    switch(t)
+    {
+        case T::EQ:
+        {
+            body = (negate ? "unless data " : "if data ") + lhs + SEP + rhs + " run " + body;
+            break;
+        }
+        case T::NEQ:
+        {
+            body = (negate ? "if data " : "unless data ") + lhs + SEP + rhs + " run " + body;
+            break;
+        }
+        default:
+        {
+            ERROR("Cannot perform integer comparison on non integer-like candidates.");
+            break;
+        }
+    }
+    return THIS;
+}
+mc_command::_This mc_command::ifint(const std::string &lhs, comparison_operation_type t, int id, const std::string &rhs, bool negate)
 {
     using T = comparison_operation_type;
     if (!isexec())
@@ -79,7 +107,7 @@ mc_command::_This mc_command::ifint(const std::string &lhs, comparison_operation
         WARN("Unknown int comparison operator.");
         break;
     }
-    body = (negate ? "unless score " : "if score ") + lhs + SEP + op + SEP + rhs + SEP + body;
+    body = (negate ? "unless score " : "if score ") + lhs + SEP + op + SEP + rhs + " run " + body;
     return THIS;
 }
 
@@ -139,6 +167,15 @@ const std::filesystem::path makeDatapack(const std::filesystem::path& path)
 
 
     return funcDir;
+}
+std::shared_ptr<comparison_register> mc_program::getFreeComparisonRegister()
+{
+    for(std::shared_ptr<comparison_register> reg : comparisonRegisters)
+    {
+        if (reg->vacant)
+            return reg;
+    }
+    return nullptr;
 }
 void writemc(mc_program &program, std::string name, const std::string &path, std::string &err)
 {
