@@ -75,6 +75,8 @@
 #define MC_COMPARE_RESET(id) MC_COMPARE_REG_SET(id, "0")
 #define MC_COMPARE_EQ(id, lhs, rhs) op PAD(data) lhs SEP rhs PAD(run scoreboard) MC_COMPARE_REG_SET(id, "1")
 #define MC_COMPARE_NEQ(id, lhs, rhs) op PAD(data) lhs SEP rhs PAD(run scoreboard) MC_COMPARE_REG_SET(id, "0")
+#define MC_CREATE_COMPARISON_REGISTER(id, criteria) PADR(objectives add) "cmp" INS(STR(id)) SEP criteria SEP "\"cmp" INS(STR(id)) "\""
+
 #pragma endregion conditionals
 
 #pragma region temporary_storage
@@ -82,4 +84,5 @@
 #define MC_TEMP_SCOREBOARD_STORAGE RBC_REGISTER_PLAYER SEP MC_TEMP_STORAGE_NAME
 #define MC_TEMP_STORAGE_SET_CONST(val) MC_DATA(set storage, MC_TEMP_STORAGE) PAD(set value) INS_L(val)
 #define MC_TEMP_STORAGE_SCOREBOARD_SET_CONST(val) PADR(players set) MC_TEMP_SCOREBOARD_STORAGE SEP INS_L(val)
+
 #pragma endregion temporary_storage

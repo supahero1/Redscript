@@ -42,10 +42,10 @@ mc_command::_This mc_command::ifcmpreg(comparison_operation_type t, int rid)
         WARN("Performing undefined operation on comparison register. Defaulting to neq.");
     bool eq = t == comparison_operation_type::EQ;
     std::string s = t == comparison_operation_type::EQ ? "if" : "unless";
-    body = s + " score " MC_COMPARE_REG_GET_RAW(INS_L(STR(rid))) + " = 1 " + body;
+    body = s + " score " MC_COMPARE_REG_GET_RAW(INS_L(STR(rid))) + " matches 1 run " + body;
     return THIS;
 }
-mc_command::_This mc_command::ifcmp(const std::string& lhs, comparison_operation_type t, int id, const std::string& rhs, bool negate)
+mc_command::_This mc_command::ifcmp(const std::string &lhs, comparison_operation_type t, int id, const std::string &rhs, bool negate)
 {
     using T = comparison_operation_type;
     if (!isexec())
@@ -53,27 +53,27 @@ mc_command::_This mc_command::ifcmp(const std::string& lhs, comparison_operation
         addroot();
         cmd = MC_EXEC_CMD_ID;
     }
-    switch(t)
+    switch (t)
     {
-        case T::EQ:
-        {
-            body = (negate ? "unless data " : "if data ") + lhs + SEP + rhs + " run " + body;
-            break;
-        }
-        case T::NEQ:
-        {
-            body = (negate ? "if data " : "unless data ") + lhs + SEP + rhs + " run " + body;
-            break;
-        }
-        default:
-        {
-            ERROR("Cannot perform integer comparison on non integer-like candidates.");
-            break;
-        }
+    case T::EQ:
+    {
+        body = (negate ? "unless data " : "if data ") + lhs + SEP + rhs + " run " + body;
+        break;
+    }
+    case T::NEQ:
+    {
+        body = (negate ? "if data " : "unless data ") + lhs + SEP + rhs + " run " + body;
+        break;
+    }
+    default:
+    {
+        ERROR("Cannot perform integer comparison on non integer-like candidates.");
+        break;
+    }
     }
     return THIS;
 }
-mc_command::_This mc_command::ifint(const std::string &lhs, comparison_operation_type t, int id, const std::string &rhs, bool negate)
+mc_command::_This mc_command::ifint(const std::string &lhs, comparison_operation_type t, int id, const std::string &rhs, bool constant, bool negate)
 {
     using T = comparison_operation_type;
     if (!isexec())
@@ -83,30 +83,35 @@ mc_command::_This mc_command::ifint(const std::string &lhs, comparison_operation
     }
 
     std::string op = "=";
-
-    switch (t)
+    if (!constant)
     {
-    case T::EQ:
-        break;
-    case T::NEQ:
-        op = "!=";
-        break;
-    case T::GT:
-        op = ">";
-        break;
-    case T::GTE:
-        op = ">=";
-        break;
-    case T::LT:
-        op = "<";
-        break;
-    case T::LTE:
-        op = "<=";
-        break;
-    default:
-        WARN("Unknown int comparison operator.");
-        break;
+
+        switch (t)
+        {
+        case T::EQ:
+            break;
+        case T::NEQ:
+            op = "!=";
+            break;
+        case T::GT:
+            op = ">";
+            break;
+        case T::GTE:
+            op = ">=";
+            break;
+        case T::LT:
+            op = "<";
+            break;
+        case T::LTE:
+            op = "<=";
+            break;
+        default:
+            WARN("Unknown int comparison operator.");
+            break;
+        }
     }
+    else
+        op = "matches";
     body = (negate ? "unless score " : "if score ") + lhs + SEP + op + SEP + rhs + " run " + body;
     return THIS;
 }
@@ -149,12 +154,12 @@ mc_command::_This mc_command::storeResult(const std::string &where)
 {
     return store(true, where);
 }
-const std::filesystem::path makeDatapack(const std::filesystem::path& path)
+const std::filesystem::path makeDatapack(const std::filesystem::path &path)
 {
-    const std::filesystem::path funcDir = path/"data"/RS_STORAGE_NAME/"function";
+    const std::filesystem::path funcDir = path / "data" / RS_STORAGE_NAME / "function";
     std::filesystem::create_directories(funcDir);
 
-    std::ofstream mcMetaPack(path/MC_MCMETA_FILE_NAME);
+    std::ofstream mcMetaPack(path / MC_MCMETA_FILE_NAME);
 
     if (!RS_CONFIG.exists("versionid"))
         throw std::runtime_error("'versionid' is not specified in redscript config.");
@@ -165,12 +170,11 @@ const std::filesystem::path makeDatapack(const std::filesystem::path& path)
 
     mcMetaPack.close();
 
-
     return funcDir;
 }
 std::shared_ptr<comparison_register> mc_program::getFreeComparisonRegister()
 {
-    for(std::shared_ptr<comparison_register> reg : comparisonRegisters)
+    for (std::shared_ptr<comparison_register> reg : comparisonRegisters)
     {
         if (reg->vacant)
             return reg;
@@ -184,7 +188,7 @@ void writemc(mc_program &program, std::string name, const std::string &path, std
         err = "'mcpath' doesn't exist in config. Can't write.";
         return;
     }
-    
+
     toLower(name);
 
     auto writeFunction = [&](mc_function &func, const std::filesystem::path &path)
@@ -198,32 +202,33 @@ void writemc(mc_program &program, std::string name, const std::string &path, std
     try
     {
         std::filesystem::path mcpath(RS_CONFIG.get<std::string>("mcpath"));
-        if(!name.ends_with(".mcfunction"))
+        if (!name.ends_with(".mcfunction"))
             name += ".mcfunction";
         const std::filesystem::path safeName = removeSpecialCharacters(name);
-        mcpath = mcpath/path;
+        mcpath = mcpath / path;
         if (!std::filesystem::exists(mcpath))
         {
             err = std::format("The Minecraft world located at '{}' doesn't exist.", mcpath.string());
             return;
         }
-        mcpath /= MC_DATAPACK_FOLDER/(safeName.stem());
+        mcpath /= MC_DATAPACK_FOLDER / (safeName.stem());
         const std::filesystem::path funcPath = makeDatapack(mcpath);
 
-        std::filesystem::path to = funcPath/safeName;
+        std::filesystem::path to = funcPath / safeName;
         if (!writeFunction(program.globalFunction, to))
         {
         _error:
             err = std::format("Could not write function to '{}'.", to.string());
             return;
         }
-        for(auto& function : program.functions)
+        for (auto &function : program.functions)
         {
-            if (!writeFunction(function.second, (to = funcPath/(function.first + ".mcfunction"))))
+            if (!writeFunction(function.second, (to = funcPath / (function.first + ".mcfunction"))))
                 goto _error;
         }
         // TODO: other functions
-    }catch(std::exception& error)
+    }
+    catch (std::exception &error)
     {
         err = error.what();
     }

@@ -1020,7 +1020,6 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
     mc_program mcprogram;
     conversion::CommandFactory factory(mcprogram, program);
     
-    factory.initProgram();
     auto parseFunction = [&](std::vector<rbc_command>& instructions) -> mccmdlist
     {
         for(size_t i = 0; i < instructions.size(); i++)
@@ -1192,12 +1191,12 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                                     rbc_register& noperable = reg2.operable ? reg  : reg2; 
                                     factory.add( factory.getRegisterValue(noperable).storeResult(PADR(scoreboard) MC_TEMP_SCOREBOARD_STORAGE) );
 
-                                    factory.compare("score", MC_OPERABLE_REG_GET(operable.id), eq, MC_TEMP_SCOREBOARD_STORAGE);
+                                    factory.compare("score", MC_OPERABLE_REG(INS_L(STR(operable.id))), eq, MC_TEMP_SCOREBOARD_STORAGE);
                                 }
                                 // both are either operable or not operable
                                 else if (reg.operable)
-                                    factory.compare("score", MC_OPERABLE_REG_GET(reg.id), eq, MC_OPERABLE_REG_GET(reg2.id));
-                                else 
+                                    factory.compare("score", MC_OPERABLE_REG(INS_L(STR(reg.id))), eq, MC_OPERABLE_REG(INS_L(STR(reg2.id))));
+                                else // TODO fix NOPERABLE_REG_GET: not raw, has extra commands at start
                                     factory.compare("data", MC_NOPERABLE_REG_GET(reg.id), eq, MC_NOPERABLE_REG_GET(reg2.id));
                                 break;
                             }
@@ -1227,12 +1226,12 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
 
                             if (reg.operable)
                             {
-                                factory.create_and_push(MC_DATA_CMD_ID, MC_TEMP_STORAGE_SCOREBOARD_SET_CONST(con.val));
-                                factory.compare("score", MC_OPERABLE_REG_GET(reg.id), eq, MC_TEMP_SCOREBOARD_STORAGE);
+                                factory.compare("score", MC_OPERABLE_REG(INS_L(STR(reg.id))), eq, con.val, true);
                             }
                             else
                             {
                                 factory.create_and_push(MC_DATA_CMD_ID, MC_TEMP_STORAGE_SET_CONST(con.val));
+                                // TODO: fix to not have leading keywords!
                                 factory.compare("data", MC_NOPERABLE_REG_GET(reg.id), eq, MC_TEMP_STORAGE);
                             }
                             break;
@@ -1278,6 +1277,17 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                     // todo
                     break;
                 }
+                case rbc_instruction::ENDIF:
+                {
+                    mcprogram.currentBlockID = -1; // wont work for nested ifs TODO fix
+                    break;
+                }
+                case rbc_instruction::RET:
+                {
+                    // TODO
+                    WARN("Return not implemented yet.");
+                    break;
+                }
             }
         }
         mccmdlist list = factory.package();
@@ -1305,6 +1315,11 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
         err = std::string("Internal error: ") + e.what();
         return mcprogram;
     }
+    // call at end so the number of registers is accurate.
+    factory.initProgram();
+    mccmdlist init = factory.package();
+    mcprogram.globalFunction.commands.insert(mcprogram.globalFunction.commands.begin(), init.begin(), init.end());
+
     return mcprogram;
 }
 namespace conversion
@@ -1317,11 +1332,15 @@ namespace conversion
         // OPERABLE REGISTERS
         // todo fix. min reg count isnt calculated correctly.
         create_and_push(MC_SCOREBOARD_CMD_ID, "objectives add temp dummy \"temp\"");
-        for(size_t i = 0; i < 10; i++)
-        {
-            create_and_push(MC_SCOREBOARD_CMD_ID, MC_CREATE_OPERABLE_REG(i, "dummy"));
-            // WARN("Non operable register not created.");
-        }
+
+        mccmdlist programInit;
+
+        for(size_t i = 0; i < context.comparisonRegisters.size(); i++)
+            programInit.push_back(mc_command{false, MC_SCOREBOARD_CMD_ID, MC_CREATE_COMPARISON_REGISTER(i, "dummy")});
+        for(size_t i = 0; i < rbc_compiler.registers.size(); i++)
+            programInit.push_back(mc_command{false, MC_SCOREBOARD_CMD_ID, MC_CREATE_OPERABLE_REG(i, "dummy")});
+
+        commands.insert(commands.begin(), programInit.begin(), programInit.end());
     }
     CommandFactory::_This CommandFactory::pushParameter    (const std::string& name, rbc_value& val)
     {
@@ -1435,7 +1454,8 @@ namespace conversion
     CommandFactory::_This CommandFactory::compare          (const std::string& locationType,
                                                             const std::string& lhs,
                                                             const bool eq,
-                                                            const std::string& rhs)
+                                                            const std::string& rhs,
+                                                            const bool rhsIsConstant)
     {
         std::shared_ptr<comparison_register> reg = context.getFreeComparisonRegister();
 
@@ -1458,16 +1478,16 @@ namespace conversion
         reg->operation = operation;
 
         create_and_push(MC_SCOREBOARD_CMD_ID, MC_COMPARE_RESET(reg->id));
-        mc_command m{false, MC_EXEC_CMD_ID, PADR(players set) MC_COMPARE_REG_GET_RAW(INS(STR(reg->id))) PADL(1)};
+        mc_command m{false, MC_EXEC_CMD_ID, PADR(scoreboard players set) MC_COMPARE_REG_GET_RAW(INS(STR(reg->id))) PADL(1)};
         if (locationType == "data")
         {
-            m.ifcmp(PADR(storage ) INS_L(lhs),
+            m.ifcmp(PADR(storage) INS_L(lhs),
                 operation, reg->id,
-                    PADR(storage ) INS_L(rhs));
+                    PADR(storage) INS_L(rhs));
         }
         else if (locationType == "score")
         {
-            m.ifint(lhs, operation, reg->id, rhs);
+            m.ifint(lhs, operation, reg->id, rhs, rhsIsConstant);
         }
         else
             WARN("Unknown comparison operation flag.");
@@ -1483,7 +1503,7 @@ namespace conversion
 
     void                  CommandFactory::make             (mc_command& cmd)
     {
-        if (!context.lastComparison)
+        if (!context.lastComparison || context.currentBlockID == -1)
             return;
 
         if (!cmd.isexec())

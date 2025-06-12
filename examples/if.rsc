@@ -1,12 +1,17 @@
 use lang;
 
-x: int = 4;
+method: void tell_player_is_odd_or_even(num: int)
+{
+    if (num % 3 == 0)
+    {
+        return "X is even";
+    }
+    else
+    {
+        return "X is odd";
+    }
+}
+x: string! = tell_player_is_odd_or_even(45);
 
-if (x % 2 == 0)
-{
-    msg(@r, "X is even.");
-}
-else
-{
-    msg(@r, "X is odd.");
-}
+
+msg(@r, x);

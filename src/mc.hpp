@@ -38,7 +38,7 @@ struct mc_command
 
     _This ifcmpreg(comparison_operation_type t, int id);
     _This ifcmp(const std::string& lhs, comparison_operation_type t, int id, const std::string& rhs, bool negate = false);
-    _This ifint   (const std::string& lhs, comparison_operation_type t, int id, const std::string& rhs, bool negate = false);
+    _This ifint   (const std::string& lhs, comparison_operation_type t, int id, const std::string& rhs, bool constant, bool negate = false);
 };
 
 typedef std::vector<mc_command> mccmdlist;
@@ -61,7 +61,7 @@ struct mc_program
 {
     uint varStackCount = 0;
     std::shared_ptr<comparison_register> lastComparison = nullptr;
-    uint currentBlockID; // 0: if, 1: elif, 2: else, 3:...
+    int currentBlockID = -1; // 0: if, 1: elif, 2: else, 3:...
     std::vector<std::shared_ptr<comparison_register>> comparisonRegisters;
     std::unordered_map<std::string, mc_function> functions;
     mc_function* currentFunction = nullptr;

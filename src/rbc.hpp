@@ -269,7 +269,7 @@ namespace conversion
         _This pushParameter  (const std::string&, rbc_value& val);
         _This popParameter   ();
         _This invoke         (const std::string& module, rbc_function& func);
-        _This compare        (const std::string& locationType, const std::string& lhs, const bool eq, const std::string& rhs);
+        _This compare        (const std::string& locationType, const std::string& lhs, const bool eq, const std::string& rhs, const bool rhsIsConstant = false);
         static mc_command getVariableValue(rs_variable& var);
         static mc_command getRegisterValue(rbc_register& reg);
         static mc_command getStackValue   (long index);
