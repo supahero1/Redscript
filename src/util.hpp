@@ -1,7 +1,8 @@
 #pragma once
 #include <cctype>  // for std::isalnum
 #include <algorithm>
-
+#include <stack>
+#include <deque>
 inline std::string removeSpecialCharacters(const std::string& input) {
     std::string output;
     for (char c : input) {
@@ -54,6 +55,18 @@ inline constexpr result_pair<_VariantT, _VariantT2> commutativeVariantEquals(siz
     return result_pair<_VariantT, _VariantT2>();
 }
 
+template<typename T, typename Container=std::deque<T> >
+class iterable_stack : public std::stack<T,Container>
+{
+public:
+    typedef typename Container::iterator iterator;
+    typedef typename Container::const_iterator const_iterator;
+
+    iterator begin() { return this->c.begin(); }
+    iterator end() { return this->c.end(); }
+    const_iterator begin() const { return this->c.begin(); }
+    const_iterator end() const { return this->c.end(); }
+};
 
 namespace util
 {
@@ -62,5 +75,6 @@ namespace util
     {
         return T(t);
     }
+    
 }
 

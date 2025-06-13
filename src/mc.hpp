@@ -2,6 +2,7 @@
 #include <unordered_map>
 #include <vector>
 #include <filesystem>
+#include <stack>
 #include "error.hpp"
 #include "bst.hpp"
 #include "mchelpers.hpp"
@@ -12,7 +13,7 @@
 #define MC_SCOREBOARD_CMD_ID 3
 #define MC_TELLRAW_CMD_ID 4
 #define MC_KILL_CMD_ID 5
-
+#define MC_RETURN_CMD_ID 6
 #define THIS *this;
 
 typedef unsigned int uint;
@@ -55,13 +56,13 @@ struct comparison_register
     {
         vacant = true;
     }
-
 };
 struct mc_program
 {
     uint varStackCount = 0;
     std::shared_ptr<comparison_register> lastComparison = nullptr;
     int currentBlockID = -1; // 0: if, 1: elif, 2: else, 3:...
+    std::stack<int> blocks;
     std::vector<std::shared_ptr<comparison_register>> comparisonRegisters;
     std::unordered_map<std::string, mc_function> functions;
     mc_function* currentFunction = nullptr;

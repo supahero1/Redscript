@@ -239,8 +239,23 @@ std::shared_ptr<rs_variable> rbc_program::getVariable(const std::string& name)
 
     auto nresult = currentFunction->localVariables.find(name);
     
-    if(nresult != currentFunction->localVariables.end()
+    if (nresult != currentFunction->localVariables.end()
     && nresult->second.first->scope <= currentScope) return nresult->second.first;
+
+    // also check parent functions
+
+    if (functionStack.size() > 0)
+    {
+        for(auto it=functionStack.begin(); it != functionStack.end(); ++it)
+        {
+            std::shared_ptr<rbc_function>& v = *it;
+
+            nresult = v->localVariables.find(name);
+
+            if (nresult != v->localVariables.end())
+                return nresult->second.first;
+        }
+    }
 
     return nullptr;
 }
@@ -524,8 +539,11 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             if (!program.currentFunction || program.currentFunction->name != name)
                 COMP_ERROR_R(RS_SYNTAX_ERROR, "Unknown function name.", false);
             function = program.currentFunction; // recursion not allowed
-            COMP_ERROR_R(RS_SYNTAX_ERROR, "Recursion is not supported.", false);
+            COMP_ERROR_R(RS_SYNTAX_ERROR, "Recursion is not supported yet.", false);
         }else function = func->second;
+
+        if (function->scope > program.currentScope)
+            COMP_ERROR_R(RS_SYNTAX_ERROR, "Nested function definitions cannot be called outside their parent function body.", false);
         int pc = 0; // param count
         token* start = current;
         auto& decorators = function->decorators;
@@ -533,27 +551,34 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             inbuilt = true;
         if (std::find(decorators.begin(), decorators.end(), rbc_function_decorator::CPP) != decorators.end())
             internal = true;
-        while(current->type != token_type::BRACKET_CLOSED)
+        adv();
+        if (current->type != token_type::BRACKET_CLOSED)
         {
-            adv();
-            rs_expression expr = expreval(program, tokens, _At, err, true, false);
-            resync(); // reassign current
-            if (expr.nonOperationalResult)
-                adv(); // object parsing finishes at }, not: ,
-            if(err->trace.ec)
-                return false;
-            auto result = expr.rbc_evaluate(program, err);
-            if(err->trace.ec)
-                return false;
+            while(1)
+            {
+                rs_expression expr = expreval(program, tokens, _At, err, true, false, false);
+                resync(); // reassign current
+                if (expr.nonOperationalResult)
+                    adv(); // object parsing finishes at }, not: ,
+                if(err->trace.ec)
+                    return false;
+                auto result = expr.rbc_evaluate(program, err);
+                if(err->trace.ec)
+                    return false;
 
-            rs_variable* param = function->getNthParameter(pc);
-            if (!param)
-                COMP_ERROR_R(RS_SYNTAX_ERROR, "No matching function call with pc of {}", false, pc);
-            program(rbc_command(rbc_instruction::PUSH, rbc_constant(token_type::STRING_LITERAL, function->name), rbc_constant(token_type::STRING_LITERAL, param->name), result));
+                rs_variable* param = function->getNthParameter(pc);
+                if (!param)
+                    COMP_ERROR_R(RS_SYNTAX_ERROR, "No matching function call with pc of {}", false, pc);
+                program(rbc_command(rbc_instruction::PUSH, rbc_constant(token_type::STRING_LITERAL, function->name), rbc_constant(token_type::STRING_LITERAL, param->name), result));
 
-            pc ++;
-            if (current->info != ',' && current->type != token_type::BRACKET_CLOSED)
-                COMP_ERROR_R(RS_SYNTAX_ERROR, "Unexpected token.", false);
+                pc ++;
+                if (current->info == ',')
+                    adv();
+                else if (current->type == token_type::BRACKET_CLOSED)
+                    break;
+                else
+                    COMP_ERROR_R(RS_SYNTAX_ERROR, "Unexpected token.", false);
+            }
         }
         if(_At >= S)
         {
@@ -682,11 +707,13 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
                 if (std::isupper(c))
                     COMP_ERROR(RS_SYNTAX_ERROR, "Function names cannot have uppercase letters due to how minecraft functions are implemented. Only use lower case letters and underscores.");
             }
+            if (program.currentFunction)
+                program.functionStack.push(program.currentFunction);
             program.currentFunction = std::make_shared<rbc_function>(name);
-
-
+            program.currentFunction->scope = program.currentScope;
             program.currentFunction->returnType = std::make_shared<rs_type_info>(retType);
             program.scopeStack.push(rbc_scope_type::FUNCTION);
+
             program.currentScope ++;
 
             do
@@ -694,14 +721,18 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
                 adv();
                 switch(current->type)
                 {
+                    case token_type::BRACKET_CLOSED:
+                        goto after_param;
                     case token_type::WORD:
                     {
                         token& varName = *current;
                         if (!adv())
                             COMP_ERROR(RS_EOF_ERROR, "Unexpected EOF.");
                         // false as we do not need to terminate variable usage with ; or =
-                        if(!varparse(varName, false, true)) // varparse adds any instructions to program.currentFunction
+                        if (!varparse(varName, false, true)) // varparse adds any instructions to program.currentFunction
                             return program;
+                        if (current->type == token_type::BRACKET_CLOSED)
+                            goto after_param;
                         break;
                     }
                     default:
@@ -710,7 +741,7 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             }
             while(current->type != token_type::BRACKET_CLOSED);
                 
-                
+        after_param:
             if(_At >= S)
                 COMP_ERROR(RS_SYNTAX_ERROR, "Missing function definition or semi-colon.");
             
@@ -768,7 +799,13 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
                     // TODO: should functions have global scope access? if so, we need to keep track of when they are created.
                     // I think not.
                     program.functions.insert({program.currentFunction->name, program.currentFunction});
-                    program.currentFunction.reset();
+                    if (!program.functionStack.empty())
+                    {
+                        program.currentFunction = program.functionStack.top();
+                        program.functionStack.pop();
+                    }
+                    else
+                        program.currentFunction.reset();
                     break;
                 }
                 case rbc_scope_type::IF:
@@ -854,7 +891,22 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             if(err->trace.ec)
                 return program;
             
-            adv();
+            resync();
+
+            if (current->type == token_type::BRACKET_CLOSED)
+            {
+                program(rbc_command(rbc_instruction::IF, lVal));
+            end_if_parse:
+                if (!adv())
+                    COMP_ERROR(RS_EOF_ERROR, "Unexpected EOF.");
+
+                if (current->type != token_type::CBRACKET_OPEN)
+                    COMP_ERROR(RS_SYNTAX_ERROR, "Unexpected token.");
+                
+                program.currentScope++;
+                program.scopeStack.push(rbc_scope_type::IF);
+                break;
+            }
 
             token& op         = *current;
             token_type compop = op.type;   
@@ -864,26 +916,21 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             if(!adv())
                 COMP_ERROR(RS_SYNTAX_ERROR, "Expected expression, not EOF.");
             // br = true as if we hit the closing bracket of the if statement we should return.
-            rs_expression right = expreval(program, tokens, _At, err, true, false);
-            if(err->trace.ec)
+            // prune = false as expreval has mismatching problems after when encountering this ).
+            // horrible code having 4 boolean flags, maybe make struct.
+            rs_expression right = expreval(program, tokens, _At, err, true, false, false);
+            if (err->trace.ec)
                 return program;
+            resync();
             rbc_value rVal = right.rbc_evaluate(program, err);
             if(err->trace.ec)
                 return program;
-            resync();
+
             if (current->type != token_type::BRACKET_CLOSED)
                 COMP_ERROR(RS_SYNTAX_ERROR, "Unexpected token.");
             program(rbc_command(rbc_instruction::IF, lVal, rbc_constant(compop, op.repr, &op.trace), rVal));
             
-            if (!adv())
-                COMP_ERROR(RS_EOF_ERROR, "Unexpected EOF.");
-
-            if (current->type != token_type::CBRACKET_OPEN)
-                COMP_ERROR(RS_SYNTAX_ERROR, "Unexpected token.");
-            
-            program.currentScope++;
-            program.scopeStack.push(rbc_scope_type::IF);
-            break;
+            goto end_if_parse;
         }
         case token_type::KW_ELSE:
         {
@@ -1161,7 +1208,8 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                 case rbc_instruction::IF:
                 {
                     RS_ASSERT_SIZE(size == 3);
-
+                    mcprogram.currentBlockID = 0;
+                    mcprogram.blocks.push(0);
                     rbc_value& lhs = *instruction.parameters.at(0);
                     rbc_constant& op = std::get<0>(*instruction.parameters.at(1));
                     bool eq = op.val == "==";
@@ -1274,18 +1322,64 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                 case rbc_instruction::ELSE:
                 {
                     mcprogram.currentBlockID = 1;
+                    mcprogram.blocks.push(1);
                     // todo
                     break;
                 }
                 case rbc_instruction::ENDIF:
                 {
-                    mcprogram.currentBlockID = -1; // wont work for nested ifs TODO fix
+                    if (mcprogram.lastComparison->id > 0)
+                    {
+                        mcprogram.lastComparison = mcprogram.comparisonRegisters.at(mcprogram.lastComparison->id - 1);
+                        mcprogram.blocks.pop();
+                        if (mcprogram.blocks.size() > 0)
+                            mcprogram.currentBlockID = mcprogram.blocks.top();
+                    }
+                    else
+                    {
+                        mcprogram.lastComparison = nullptr;
+                        mcprogram.currentBlockID = -1;
+                    }
                     break;
                 }
                 case rbc_instruction::RET:
                 {
                     // TODO
-                    WARN("Return not implemented yet.");
+                    // return 1 if a return value is present, 0 if not.
+                    if (size > 0)
+                    {
+                        rbc_value& val = *instruction.parameters.at(0);
+
+                        switch(val.index())
+                        {
+                            case 0:
+                            {
+                                rbc_constant& _const = std::get<0>(val);
+                                // store constant in return register, return 1.
+                                factory.create_and_push(MC_DATA_CMD_ID, MC_DATA(modify storage, RS_PROGRAM_RETURN_REGISTER) PAD(set from value) INS_L(_const.val));
+                                break;
+                            }
+                            case 1:
+                            {
+                                rbc_register& reg = *std::get<1>(val);
+
+                                factory.getRegisterValue(reg).storeResult(PADR(storage) RS_PROGRAM_STORAGE SEP RS_PROGRAM_RETURN_REGISTER);
+                                break;   
+                            }
+                            case 2:
+                            {
+                                rs_variable& var = *std::get<2>(val);
+
+                                factory.copyStorage(RS_PROGRAM_STORAGE SEP RS_PROGRAM_RETURN_REGISTER, MC_VARIABLE_VALUE_FULL(var.comp_info.varIndex));
+                                break;
+                            }
+                            default:
+                                ERROR("Unimplemented return case for object, list, etc.");
+                        }
+                        factory.Return(true);
+                    }
+                    else
+                        factory.Return(false);
                     break;
                 }
             }
@@ -1342,6 +1436,12 @@ namespace conversion
 
         commands.insert(commands.begin(), programInit.begin(), programInit.end());
     }
+    CommandFactory::_This CommandFactory::Return           (bool val)
+    {
+        create_and_push(MC_RETURN_CMD_ID, val ? "1" : "0");
+        return THIS;
+    }
+
     CommandFactory::_This CommandFactory::pushParameter    (const std::string& name, rbc_value& val)
     {
         switch(val.index())
@@ -1487,7 +1587,7 @@ namespace conversion
         }
         else if (locationType == "score")
         {
-            m.ifint(lhs, operation, reg->id, rhs, rhsIsConstant);
+            m.ifint(lhs, operation, reg->id, rhs, rhsIsConstant, !eq);
         }
         else
             WARN("Unknown comparison operation flag.");

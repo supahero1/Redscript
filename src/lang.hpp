@@ -118,7 +118,7 @@ struct rs_object
     }
 };
 
-void prune_expr(rbc_program&, rs_expression&, rs_error*);
+void prune_expr(rbc_program&, bst_operation<token>&, rs_error*);
 bst_operation<token> make_bst(rbc_program& program, token_list& tlist, long& start, rs_error* err, bool br = false, bool oneNode = false, bool obj = false);
-rs_expression expreval(rbc_program& program, token_list& tlist, long& start, rs_error* err, bool = false, bool = true, bool obj = false);
+rs_expression expreval(rbc_program& program, token_list& tlist, long& start, rs_error* err, bool = false, bool = true, bool obj = false, bool prune = true);
 std::shared_ptr<rs_object> parseInlineObject(rbc_program& program, token_list& tlist, long& start, rs_error* err);

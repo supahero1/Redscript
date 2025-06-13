@@ -408,7 +408,7 @@ void prune_expr(rbc_program& program, bst_operation<token>& expr, rs_error* err)
     
 }
 
-rs_expression expreval(rbc_program &program, token_list &tlist, long& start, rs_error *err, bool br, bool lineEnd, bool obj)
+rs_expression expreval(rbc_program &program, token_list &tlist, long& start, rs_error *err, bool br, bool lineEnd, bool obj, bool prune)
 {
     rs_expression expr;
     token& current = tlist.at(start);
@@ -439,9 +439,14 @@ rs_expression expreval(rbc_program &program, token_list &tlist, long& start, rs_
             EXPR_ERROR_R(RS_EOF_ERROR, "Missing semicolon.", tlist.at(start + 1).trace, expr);
         start++;
     }
-    prune_expr(program, bst, err);
-    if (err->trace.ec)
-        return expr;
+    else if (!bst.isSingular())
+        start++;
+    if(prune)
+    {
+        prune_expr(program, bst, err);
+        if (err->trace.ec)
+            return expr;
+    }
     expr.operation = bst;
 
     return expr;

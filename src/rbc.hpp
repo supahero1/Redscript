@@ -149,6 +149,7 @@ struct raw_rbc_function
 struct rbc_function
 {
     std::string name;
+    uint scope = 0;
     std::unordered_map<std::string, rbc_func_var_t> localVariables;
     std::vector<rbc_command> instructions;
     std::vector<rbc_function_decorator> decorators;
@@ -169,6 +170,7 @@ struct rbc_program
     rs_error* context;
     uint32_t  currentScope = 0;
     std::stack<rbc_scope_type> scopeStack;
+    iterable_stack<std::shared_ptr<rbc_function>> functionStack;
     std::vector<std::shared_ptr<rs_variable>> globalVariables;
     std::unordered_map<std::string, std::shared_ptr<rs_object>> objectTypes;
     std::unordered_map<std::string, std::shared_ptr<rbc_function>> functions;
@@ -269,6 +271,7 @@ namespace conversion
         _This pushParameter  (const std::string&, rbc_value& val);
         _This popParameter   ();
         _This invoke         (const std::string& module, rbc_function& func);
+        _This Return         (bool val);
         _This compare        (const std::string& locationType, const std::string& lhs, const bool eq, const std::string& rhs, const bool rhsIsConstant = false);
         static mc_command getVariableValue(rs_variable& var);
         static mc_command getRegisterValue(rbc_register& reg);

@@ -1,18 +1,23 @@
-tell_player_is_odd_or_even:
-	SAVE (reg){(id=0) op=1, vacant=1}, {{num, 0, 0, 43}, name=num, scope=1, typeinf=1, (g=0, c=0)}
-	MATH (reg){(id=0) op=1, vacant=1}, (const){T=2, v=3}, (const){T=2, v=4}
-	IF (reg){(id=0) op=1, vacant=1}, (const){T=18, v===}, (const){T=2, v=0}
-	PUSH (const){T=1, v=msg}, (const){T=1, v=_msg}, (const){T=6, v=r}
-	PUSH (const){T=1, v=msg}, (const){T=1, v=_p}, (const){T=1, v=X is even.}
-	CALL (const){T=1, v=msg}
-	ELSE
-	PUSH (const){T=1, v=msg}, (const){T=1, v=_msg}, (const){T=6, v=r}
-	PUSH (const){T=1, v=msg}, (const){T=1, v=_p}, (const){T=1, v=X is odd.}
-	CALL (const){T=1, v=msg}
+return_if_even:
+	SAVE (reg){(id=0) op=1, vacant=1}, {{x, 0, 0, 32}, name=x, scope=1, typeinf=0, (g=0, c=0)}
+	MATH (reg){(id=0) op=1, vacant=1}, (const){T=2, v=4}, (const){T=2, v=2}
+	IF (reg){(id=0) op=1, vacant=1}, (const){T=18, v===}, (const){T=2, v=16}
+	CALL (const){T=1, v=_do_stuff}
 	ENDIF
-kill:
-msg:
-CREATE {{x, 0, 0, 1}, name=x, scope=0, typeinf=1, (g=1, c=0)}, (const){T=2, v=4}
-PUSH (const){T=1, v=tell_player_is_odd_or_even}, (const){T=1, v=num}, (const){T=2, v=8375325723}
-CALL (const){T=1, v=tell_player_is_odd_or_even}
+	RET 
+_do_stuff:
+	SAVE (reg){(id=0) op=1, vacant=1}, {{x, 0, 0, 32}, name=x, scope=1, typeinf=0, (g=0, c=0)}
+	MATH (reg){(id=0) op=1, vacant=1}, (const){T=2, v=2}, (const){T=2, v=4}
+	IF (reg){(id=0) op=1, vacant=1}, (const){T=19, v=!=}, (const){T=2, v=0}
+	SAVE (reg){(id=0) op=1, vacant=1}, {{x, 0, 0, 32}, name=x, scope=1, typeinf=0, (g=0, c=0)}
+	MATH (reg){(id=0) op=1, vacant=1}, (const){T=2, v=2}, (const){T=2, v=3}
+	IF (reg){(id=0) op=1, vacant=1}, (const){T=18, v===}, (const){T=2, v=4}
+	SAVE {{x, 0, 0, 32}, name=x, scope=1, typeinf=0, (g=0, c=0)}, (const){T=2, v=2}
+	ENDIF
+	RET {{x, 0, 0, 32}, name=x, scope=1, typeinf=0, (g=0, c=0)}
+	ELSE
+	RET 
+	ENDIF
+PUSH (const){T=1, v=return_if_even}, (const){T=1, v=x}, (const){T=2, v=12}
+CALL (const){T=1, v=return_if_even}
 POP 

@@ -24,6 +24,9 @@ mc_command::_This mc_command::addroot()
     case MC_TELLRAW_CMD_ID:
         name = "tellraw";
         break;
+    case MC_RETURN_CMD_ID:
+        name = "return";
+        break;
     default:
         WARN("Unknown command.");
         break;
@@ -33,6 +36,11 @@ mc_command::_This mc_command::addroot()
 }
 mc_command::_This mc_command::ifcmpreg(comparison_operation_type t, int rid)
 {
+    std::string k;
+    if (body.starts_with("if")) // dont add run keyword
+        k = " matches 1 ";
+    else
+        k = " matches 1 run ";
     if (!isexec())
     {
         addroot();
@@ -42,12 +50,15 @@ mc_command::_This mc_command::ifcmpreg(comparison_operation_type t, int rid)
         WARN("Performing undefined operation on comparison register. Defaulting to neq.");
     bool eq = t == comparison_operation_type::EQ;
     std::string s = t == comparison_operation_type::EQ ? "if" : "unless";
-    body = s + " score " MC_COMPARE_REG_GET_RAW(INS_L(STR(rid))) + " matches 1 run " + body;
+    
+    body = s + " score " MC_COMPARE_REG_GET_RAW(INS_L(STR(rid))) + k + body;
     return THIS;
 }
 mc_command::_This mc_command::ifcmp(const std::string &lhs, comparison_operation_type t, int id, const std::string &rhs, bool negate)
 {
     using T = comparison_operation_type;
+
+    // TODO: no k impl (see other comparison functions)
     if (!isexec())
     {
         addroot();
@@ -76,6 +87,8 @@ mc_command::_This mc_command::ifcmp(const std::string &lhs, comparison_operation
 mc_command::_This mc_command::ifint(const std::string &lhs, comparison_operation_type t, int id, const std::string &rhs, bool constant, bool negate)
 {
     using T = comparison_operation_type;
+    std::string k = body.starts_with("if") ? SEP : " run ";
+
     if (!isexec())
     {
         addroot();
@@ -89,9 +102,7 @@ mc_command::_This mc_command::ifint(const std::string &lhs, comparison_operation
         switch (t)
         {
         case T::EQ:
-            break;
         case T::NEQ:
-            op = "!=";
             break;
         case T::GT:
             op = ">";
@@ -112,7 +123,7 @@ mc_command::_This mc_command::ifint(const std::string &lhs, comparison_operation
     }
     else
         op = "matches";
-    body = (negate ? "unless score " : "if score ") + lhs + SEP + op + SEP + rhs + " run " + body;
+    body = (negate ? "unless score " : "if score ") + lhs + SEP + op + SEP + rhs + k + body;
     return THIS;
 }
 
