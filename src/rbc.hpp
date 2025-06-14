@@ -220,6 +220,7 @@ namespace conversion
     public:
         using _This = CommandFactory&;
     private:
+        bool _nonConditionalFlag = false;
         mccmdlist commands;
         mc_program& context;
         rbc_program& rbc_compiler;

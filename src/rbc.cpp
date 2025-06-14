@@ -1421,6 +1421,7 @@ namespace conversion
     void                  CommandFactory::initProgram      ()
     {
         // ROOT
+        _nonConditionalFlag = true;
         create_and_push(MC_DATA_CMD_ID, MC_DATA(merge storage, RS_PROGRAM_DATA_DEFAULT));
 
         // OPERABLE REGISTERS
@@ -1435,6 +1436,8 @@ namespace conversion
             programInit.push_back(mc_command{false, MC_SCOREBOARD_CMD_ID, MC_CREATE_OPERABLE_REG(i, "dummy")});
 
         commands.insert(commands.begin(), programInit.begin(), programInit.end());
+
+        _nonConditionalFlag = false;
     }
     CommandFactory::_This CommandFactory::Return           (bool val)
     {
@@ -1603,7 +1606,7 @@ namespace conversion
 
     void                  CommandFactory::make             (mc_command& cmd)
     {
-        if (!context.lastComparison || context.currentBlockID == -1)
+        if (!context.lastComparison || context.currentBlockID == -1 || _nonConditionalFlag)
             return;
 
         if (!cmd.isexec())
