@@ -37,6 +37,7 @@
 #define MC_OPERABLE_REG_SET(id, v) PADR(players) PADR(set) MC_OPERABLE_REG(INS(STR(id))) SEP INS_L(v)
 #define MC_OPERABLE_REG_GET(id) PADR(players) PADR(get) MC_OPERABLE_REG(INS_L(STR(id)))
 #define MC_NOPERABLE_REG_GET(id) MC_DATA(get storage, ARR_AT(RS_PROGRAM_REGISTERS, STR(id)))
+#define MC_NOPERABLE_REG(id) RBC_REGISTER_PLAYER SEP ARR_AT(RS_PROGRAM_REGISTERS, STR(id))
 #pragma endregion registers
 
 #pragma region operable_math

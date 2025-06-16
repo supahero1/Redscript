@@ -40,9 +40,10 @@ namespace rbc_commands
 #pragma region decorators
 rbc_function_decorator parseDecorator(const std::string& name)
 {
-    if (name == "__inbuilt__") return rbc_function_decorator::INBUILT;
+    if (name == "extern") return rbc_function_decorator::EXTERN;
     if (name == "__single__")  return rbc_function_decorator::SINGLE;
     if (name == "__cpp__") return rbc_function_decorator::CPP;
+    if (name == "__nocompile__") return rbc_function_decorator::NOCOMPILE;
     return rbc_function_decorator::UNKNOWN;
 }
 
@@ -547,7 +548,7 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
         int pc = 0; // param count
         token* start = current;
         auto& decorators = function->decorators;
-        if(std::find(decorators.begin(), decorators.end(), rbc_function_decorator::INBUILT) != decorators.end())
+        if(std::find(decorators.begin(), decorators.end(), rbc_function_decorator::EXTERN) != decorators.end())
             inbuilt = true;
         if (std::find(decorators.begin(), decorators.end(), rbc_function_decorator::CPP) != decorators.end())
             internal = true;
@@ -709,6 +710,7 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             }
             if (program.currentFunction)
                 program.functionStack.push(program.currentFunction);
+
             program.currentFunction = std::make_shared<rbc_function>(name);
             program.currentFunction->scope = program.currentScope;
             program.currentFunction->returnType = std::make_shared<rs_type_info>(retType);
@@ -752,11 +754,11 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
                 auto decorator = parseDecorator(dName);
 
                 if(decorator == rbc_function_decorator::UNKNOWN)
-                    COMP_ERROR(RS_SYNTAX_ERROR, "Unknown function decorator: '%s'.", dName);
+                    COMP_ERROR(RS_SYNTAX_ERROR, "Unknown function decorator: '{}'.", dName);
 
                 auto& decorators = program.currentFunction->decorators;
                 if (std::find(decorators.begin(), decorators.end(), decorator) != decorators.end())
-                    COMP_ERROR(RS_SYNTAX_ERROR, "Duplicate function decorator: '%s'.", dName);
+                    COMP_ERROR(RS_SYNTAX_ERROR, "Duplicate function decorator: '{}'.", dName);
 
                 decorators.push_back(decorator);
             }
@@ -884,7 +886,8 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             
             if(!adv())
                 COMP_ERROR(RS_SYNTAX_ERROR, "Expected expression, not EOF.");
-            rs_expression left = expreval(program, tokens, _At, err, false, false);
+            // br = true as if we hit the closing bracket of the if statement we should return.
+            rs_expression left = expreval(program, tokens, _At, err, true, false, false);
             if(err->trace.ec)
                 return program;
             rbc_value lVal = left.rbc_evaluate(program, err);
@@ -1207,6 +1210,81 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                 }
                 case rbc_instruction::IF:
                 {
+                    RS_ASSERT_SIZE(size > 0);
+
+                    if (size == 1)
+                    {
+                        // bool convertable if statement
+                        rbc_value& param = *instruction.parameters.at(0);
+                        switch(param.index())
+                        {
+                            case 0:
+                            {
+                                rbc_constant& _const = std::get<0>(param);
+                                if (_const.val_type != token_type::INT_LITERAL)
+                                {
+                                    // todo move error to torbc
+                                    err = std::format("Cannot convert typeid {} to boolean.", static_cast<int>(_const.val_type));
+                                    return {};
+                                }
+                                const int value = std::stoi(_const.val);
+
+                                if (value == 0)
+                                {
+                                    // skip instructions contained
+                                    while(++i < instructions.size())
+                                    {
+                                        auto& inst = instructions.at(i);
+                                        if (inst.type == rbc_instruction::ELSE)
+                                            goto skip;
+                                        if (inst.type == rbc_instruction::ENDIF)
+                                            break;
+                                    }
+
+                                    i++; // skip ENDIF
+                                }
+                                else
+                                {
+                                skip:
+                                    // remove next end if and parse as normal
+                                    size_t c = i;
+                                    while(++c < instructions.size())
+                                    {
+                                        auto& inst = instructions.at(c);
+                                        if(inst.type == rbc_instruction::ENDIF)
+                                        {
+                                            instructions.erase(instructions.begin() + c);
+                                            break;
+                                        }
+                                    }
+                                }
+                                break;
+                            }
+                            case 1:
+                            {
+                                rbc_register& reg = *std::get<1>(param);
+                                if (reg.operable)
+                                {
+                                    // see if contents is not 0
+                                    factory.compare("score", MC_OPERABLE_REG(INS_L(STR(reg.id))), false, "0", true);
+                                }
+                                else
+                                {
+                                    factory.compare("data", MC_NOPERABLE_REG(reg.id), false, "0", true);
+                                    // see if contents is also not 0
+                                }
+                                break;
+                            }
+                            case 2:
+                            {
+                                rs_variable& var = *std::get<2>(param);
+                                factory.compare("data", MC_VARIABLE_VALUE_FULL(var.comp_info.varIndex), false, "0", true);
+                                break;
+                            }
+                        }
+                        break;
+                    }
+                    
                     RS_ASSERT_SIZE(size == 3);
                     mcprogram.currentBlockID = 0;
                     mcprogram.blocks.push(0);
@@ -1398,7 +1476,7 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
             if 
             (
                 std::find(decorators.begin(), decorators.end(), rbc_function_decorator::CPP) == decorators.end() &&
-                std::find(decorators.begin(), decorators.end(), rbc_function_decorator::INBUILT) == decorators.end()
+                std::find(decorators.begin(), decorators.end(), rbc_function_decorator::EXTERN) == decorators.end()
             ) // not inbuilt function 
             {
                 mcprogram.functions.insert({function.first, mc_function{parseFunction(function.second->instructions)}});
