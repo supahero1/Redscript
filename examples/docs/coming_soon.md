@@ -17,7 +17,7 @@ If it fails, an error is thrown.
 ### Examples
 
 ```c++
-method say(x: selector, s: string) wrapper(impl::say)
+method say(x: selector, s: string) __wrapper__(impl::say)
 {
     compile_assert(type(s) == string, "Invalid argument type.");
 
