@@ -26,10 +26,10 @@ method: void myFunction(x: int)
     msg(@r, "Parameter: ", x);
 }
 // the function must be compiled using redscript.
-method: void myFunctionInExternalDatapack(x: string) __inbuilt__;
-method: void myNamedFunctionInExternalDatapack(x: string) __inbuilt__("nameOfFunction");
+method: void myFunctionInExternalDatapack(x: string) extern;
+method: void myNamedFunctionInExternalDatapack(x: string) extern("nameOfFunction");
 // example: //wand
-method: void myCommandInExternalDatapack() __external__("/wand");
+method: void myCommandInExternalDatapack() raw_extern("/wand");
 
 object minimal_player
 {
