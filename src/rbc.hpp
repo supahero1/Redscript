@@ -67,9 +67,10 @@ enum class rbc_value_type
 };
 enum class rbc_function_decorator
 {
-    INBUILT, // inbuilt functions
+    EXTERN, // inbuilt functions
     SINGLE,  // functions with 1 single call, redundant to compile.
     CPP,
+    NOCOMPILE,
     UNKNOWN
 };
 
@@ -220,6 +221,7 @@ namespace conversion
     public:
         using _This = CommandFactory&;
     private:
+        bool _nonConditionalFlag = false;
         mccmdlist commands;
         mc_program& context;
         rbc_program& rbc_compiler;

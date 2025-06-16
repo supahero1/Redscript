@@ -3,11 +3,16 @@
 #include "lang.hpp"
 #include "mchelpers.hpp"
 
+// for readability
+#ifndef INB_IMPL_PARAMETERS
+#define INB_IMPL_PARAMETERS rbc_program& program, conversion::CommandFactory& factory, std::vector<rbc_value>& parameters, std::string& err 
+#endif
+
 #define IMPL_ERROR(msg) {err=msg " (impl errors do not have trace as of beta, check function calls)"; return;}
 namespace inb_impls
 {
     // technically tellraw impl.
-    void msg(rbc_program& program, conversion::CommandFactory& factory, std::vector<rbc_value>& parameters, std::string& err)
+    void msg(INB_IMPL_PARAMETERS)
     {
         // TODO: tellraw
         rbc_value& selector = parameters.at(0);
@@ -46,7 +51,7 @@ namespace inb_impls
         }
         
     }
-    void kill(rbc_program& program, conversion::CommandFactory& factory, std::vector<rbc_value>& parameters, std::string& err)
+    void kill(INB_IMPL_PARAMETERS)
     {
         rbc_value& selector = parameters.at(0);
         if (selector.index() != 0)
@@ -59,5 +64,9 @@ namespace inb_impls
             goto fail;
 
         factory.create_and_push(MC_KILL_CMD_ID, MC_KILL(_const.val));
+    }
+    void compile_assert(INB_IMPL_PARAMETERS)
+    {
+        err = "Thise inbuilt function is not implemented yet.";
     }
 }
