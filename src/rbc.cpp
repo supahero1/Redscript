@@ -30,6 +30,10 @@ namespace rbc_commands
         {
             return rbc_command(rbc_instruction::CREATE, rbc_value(var), val);
         }
+        rbc_command storeReturn(std::shared_ptr<rs_variable> var)
+        {
+            return rbc_command(rbc_instruction::SAVERET, rbc_value(var));
+        }
         rbc_command create(std::shared_ptr<rs_variable> var)
         {
             return rbc_command(rbc_instruction::CREATE, rbc_value(var));
@@ -41,6 +45,8 @@ namespace rbc_commands
 rbc_function_decorator parseDecorator(const std::string& name)
 {
     if (name == "extern") return rbc_function_decorator::EXTERN;
+    if (name == "wrapper") return rbc_function_decorator::WRAPPER;
+    if (name == "noreturn") return rbc_function_decorator::NORETURN;
     if (name == "__single__")  return rbc_function_decorator::SINGLE;
     if (name == "__cpp__") return rbc_function_decorator::CPP;
     if (name == "__nocompile__") return rbc_function_decorator::NOCOMPILE;
@@ -429,6 +435,8 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             COMP_ERROR_R(RS_SYNTAX_ERROR, "Invalid type notation.", tinfo);
         return tinfo;
     };
+    // forward decl
+    std::function<bool(std::string&, bool)> callparse;
     // must be called at the index of the token after the variable name, ie myVar:int, at the colon.
     auto varparse = [&](token& name, bool needsTermination = true, bool parameter = false, bool obj = false) -> std::shared_ptr<rs_variable>
     {
@@ -476,7 +484,31 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             }
             if(!adv())
                 COMP_ERROR_R(RS_EOF_ERROR, "Expected expression, not EOF.", nullptr);
-            
+            token* next = nullptr;
+            if (current->type == token_type::WORD && (next = peek()) && next->type == token_type::BRACKET_OPEN)
+            {
+                // its a function call, function calls are expensive and only allowed once in an expression,
+                // hence why we skip expreval here.
+                std::string& funcname = current->repr;
+                auto f = program.functions.find(funcname);
+                if (f != program.functions.end())
+                {
+                    auto& decorators = f->second->decorators;
+                    if(std::find(decorators.begin(), decorators.end(), rbc_function_decorator::NORETURN) != decorators.end())
+                        COMP_ERROR_R(RS_SYNTAX_ERROR, "Cannot assign variable the value of a function that is marked as 'noreturn'.", nullptr);
+                }
+                adv();
+
+                if (!callparse(funcname, false))
+                    return nullptr;
+                if (!adv() || current->type != token_type::LINE_END)
+                    COMP_ERROR_R(RS_SYNTAX_ERROR, "Missing semi-colon. This error can arise if you are calling a function within an expression. Function calls are not allowed in arithmetic expressions.", nullptr);
+                if (needsCreation)
+                    program(rbc_commands::variables::create(variable));
+
+                program(rbc_commands::variables::storeReturn(variable));
+                break;
+            }
             rs_expression expr = expreval(program, tokens, _At, err);
             if(err->trace.ec)
                 return nullptr;
@@ -529,7 +561,7 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
 #pragma endregion variables
 #pragma region function_calls
     // must be called at index of open br, example: f() => ( <-
-    auto callparse = [&](std::string& name, bool needsTermination = true) -> bool
+    callparse = [&](std::string& name, bool needsTermination = true) -> bool
     {
         auto func = program.functions.find(name);
         std::shared_ptr<rbc_function> function = nullptr;
@@ -607,6 +639,7 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             COMP_ERROR_R(RS_SYNTAX_ERROR, "Missing semi-colon.", false);
         return true;
     };
+    // assign callparseRef to allow for forward decl calling of lambda
 #pragma endregion function_calls
 #pragma region objects
     // must be called at the index of opening bracket
@@ -671,7 +704,7 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             }
             else if (follows(token_type::BRACKET_OPEN))
             {
-                if(!callparse(word.repr))
+                if(!callparse(word.repr, true))
                     return program;
             }
             break;
@@ -864,7 +897,7 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             if(follows(token_type::BRACKET_OPEN))
             {
                 // function call TODO
-                if(!callparse(start.repr))
+                if(!callparse(start.repr, true))
                     return program;
             }
             else
@@ -1154,15 +1187,19 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                     rbc_constant& name = std::get<rbc_constant>(*instruction.parameters.at(0));
                     rbc_function& func = *program.functions.find(name.val)->second;
 
+                    factory.disableBuffer();
+                    
                     if (std::find(func.decorators.begin(), func.decorators.end(), rbc_function_decorator::CPP) != func.decorators.end())
                     {
                         long caret = i;
                         std::vector<rbc_value> parameters;
                         rbc_command* cmd;
+
+                        // we dont need the parameter instructions anymore.
+                        factory.clearBuffer();
                         while(--caret >= 0 && (cmd = &instructions.at(caret))->type == rbc_instruction::PUSH)
                         {
                             parameters.push_back(*cmd->parameters.at(2));
-                            factory.pop_back(); // remove all parsed commands to push parameters onto stack. Bad?
                             mcprogram.varStackCount--;
                         }
                         std::vector<rbc_value> reversed;
@@ -1183,20 +1220,34 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                             return {}; // todo can printerr here!!!
                     }
                     else
+                    {
+                        // we do need the parameters at runtime! the function is not inbuilt
+                        factory.addBuffer();
                         factory.invoke(moduleName, func);
+                        factory.clearBuffer();
 
+                    }
                     while (i + 1 < instructions.size() && instructions.at(i + 1).type == rbc_instruction::POP)
                     {
                         i++;
                         factory.popParameter();
+                        mcprogram.varStackCount--;
                     }
 
-                    // todo
                     break;
                 }
                 case rbc_instruction::PUSH:
                 {
                     RS_ASSERT_SIZE(size >= 2);
+
+                    // store PUSH generated commands into a buffer so that if an inbuilt function is called,
+                    // we can clear the buffer as the function is handled at compile time.
+                    if (!factory.usingBuffer())
+                    {
+                        factory.createBuffer();
+                        factory.enableBuffer();
+                    }
+
                     rbc_constant funcName = std::get<0>(*instruction.parameters.at(0));
                     rbc_constant paramName = std::get<0>(*instruction.parameters.at(1));
                     auto func = program.functions.find(funcName.val);
@@ -1206,12 +1257,14 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
 
                     factory.createVariable(*param, *instruction.parameters.at(2));
                     mcprogram.stack.push_back(param);
+
                     break;
                 }
                 case rbc_instruction::IF:
+                case rbc_instruction::NIF:
                 {
                     RS_ASSERT_SIZE(size > 0);
-
+                    const bool invertFlag = instruction.type == rbc_instruction::NIF;
                     if (size == 1)
                     {
                         // bool convertable if statement
@@ -1263,14 +1316,18 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                             case 1:
                             {
                                 rbc_register& reg = *std::get<1>(param);
+                                auto cmpreg = factory.getFreeComparisonRegister();
+
                                 if (reg.operable)
                                 {
-                                    // see if contents is not 0
-                                    factory.compare("score", MC_OPERABLE_REG(INS_L(STR(reg.id))), false, "0", true);
+
+
+                                    // makes reg if needed
+                                    factory.compareNull(true, MC_OPERABLE_REG(INS_L(STR(reg.id))), !invertFlag);
                                 }
                                 else
                                 {
-                                    factory.compare("data", MC_NOPERABLE_REG(reg.id), false, "0", true);
+                                    factory.compareNull(false, MC_NOPERABLE_REG(reg.id), !invertFlag);
                                     // see if contents is also not 0
                                 }
                                 break;
@@ -1278,9 +1335,11 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                             case 2:
                             {
                                 rs_variable& var = *std::get<2>(param);
-                                factory.compare("data", MC_VARIABLE_VALUE_FULL(var.comp_info.varIndex), false, "0", true);
+                                factory.compareNull(false, MC_VARIABLE_VALUE(var.comp_info.varIndex), !invertFlag);
                                 break;
                             }
+                            default:
+                                ERROR("Cannot compare rbc_value of unimplemented typeid to null. If you see this error, flag an issue.");
                         }
                         break;
                     }
@@ -1291,6 +1350,8 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                     rbc_value& lhs = *instruction.parameters.at(0);
                     rbc_constant& op = std::get<0>(*instruction.parameters.at(1));
                     bool eq = op.val == "==";
+                    if (invertFlag) eq = !eq;
+
                     rbc_value& rhs = *instruction.parameters.at(2);
 
                     // commutative check, as no values are modified
@@ -1399,6 +1460,8 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                 }
                 case rbc_instruction::ELSE:
                 {
+                    // pop the if off the blocks.
+                    mcprogram.blocks.pop();
                     mcprogram.currentBlockID = 1;
                     mcprogram.blocks.push(1);
                     // todo
@@ -1406,18 +1469,20 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                 }
                 case rbc_instruction::ENDIF:
                 {
-                    if (mcprogram.lastComparison->id > 0)
-                    {
-                        mcprogram.lastComparison = mcprogram.comparisonRegisters.at(mcprogram.lastComparison->id - 1);
-                        mcprogram.blocks.pop();
-                        if (mcprogram.blocks.size() > 0)
-                            mcprogram.currentBlockID = mcprogram.blocks.top();
-                    }
+                    mcprogram.blocks.pop();
+
+                    if (mcprogram.blocks.size() > 0)
+                        mcprogram.currentBlockID = mcprogram.blocks.top();
                     else
-                    {
-                        mcprogram.lastComparison = nullptr;
                         mcprogram.currentBlockID = -1;
-                    }
+
+                    // if the parent block is an if statement
+                    if (mcprogram.currentBlockID == 0)
+                        mcprogram.lastComparison = mcprogram.comparisonRegisters.at(mcprogram.lastComparison->id - 1);
+                    else
+                        mcprogram.lastComparison = nullptr;
+
+                   
                     break;
                 }
                 case rbc_instruction::RET:
@@ -1433,8 +1498,12 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                             case 0:
                             {
                                 rbc_constant& _const = std::get<0>(val);
+                                _const.quoteIfStr();
                                 // store constant in return register, return 1.
-                                factory.create_and_push(MC_DATA_CMD_ID, MC_DATA(modify storage, RS_PROGRAM_RETURN_REGISTER) PAD(set from value) INS_L(_const.val));
+                                factory.create_and_push(MC_DATA_CMD_ID, MC_DATA(modify storage, RS_PROGRAM_RETURN_REGISTER) PAD(set value) INS_L(_const.val));
+                                
+                                // store its type info
+                                factory.create_and_push(MC_DATA_CMD_ID, MC_DATA(modify storage, RS_PROGRAM_RETURN_TYPE_REGISTER) PAD(set value) INS_L(STR(static_cast<int>(_const.val_type))));
                                 break;
                             }
                             case 1:
@@ -1442,6 +1511,18 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                                 rbc_register& reg = *std::get<1>(val);
 
                                 factory.getRegisterValue(reg).storeResult(PADR(storage) RS_PROGRAM_STORAGE SEP RS_PROGRAM_RETURN_REGISTER);
+
+                                if (reg.operable)
+                                {
+                                    // must be int
+                                    factory.create_and_push(MC_DATA_CMD_ID, MC_DATA(modify storage, RS_PROGRAM_RETURN_TYPE_REGISTER) PAD(set value) INS_L(STR(static_cast<int>(token_type::INT_LITERAL))));
+                                }
+                                else
+                                {
+                                    // not implemented
+                                    ERROR("Cannot save type info for return value in non-operable register. Not implemented. This will cause the type function to fail for some variables.");
+                                }
+
                                 break;   
                             }
                             case 2:
@@ -1449,6 +1530,7 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                                 rs_variable& var = *std::get<2>(val);
 
                                 factory.copyStorage(RS_PROGRAM_STORAGE SEP RS_PROGRAM_RETURN_REGISTER, MC_VARIABLE_VALUE_FULL(var.comp_info.varIndex));
+                                factory.copyStorage(RS_PROGRAM_STORAGE SEP RS_PROGRAM_RETURN_TYPE_REGISTER, MC_VARIABLE_TYPE_FULL(var.comp_info.varIndex));
                                 break;
                             }
                             default:
@@ -1460,6 +1542,16 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                         factory.Return(false);
                     break;
                 }
+                case rbc_instruction::SAVERET:
+                {
+                    RS_ASSERT_SIZE(size == 1);
+
+                    rs_variable& var = *std::get<2>(*instruction.parameters.at(0));
+
+                    factory.copyStorage(MC_VARIABLE_VALUE(var.comp_info.varIndex), RS_PROGRAM_RETURN_REGISTER);
+                    factory.copyStorage(MC_VARIABLE_TYPE(var.comp_info.varIndex) , RS_PROGRAM_RETURN_TYPE_REGISTER);
+                    break;
+                }
             }
         }
         mccmdlist list = factory.package();
@@ -1467,7 +1559,7 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
         return list;
     };
     
-    try{
+    // try{
         mcprogram.globalFunction.commands = parseFunction(program.globalFunction.instructions);
 
         for(auto& function : program.functions)
@@ -1482,11 +1574,12 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                 mcprogram.functions.insert({function.first, mc_function{parseFunction(function.second->instructions)}});
             }
         }
-    } catch (std::exception& e)
-    {
-        err = std::string("Internal error: ") + e.what();
-        return mcprogram;
-    }
+    // } catch (std::exception& e)
+    // {
+    //     throw e;
+    //     err = std::string("Internal error: ") + e.what();
+    //     return mcprogram;
+    // }
     // call at end so the number of registers is accurate.
     factory.initProgram();
     mccmdlist init = factory.package();
@@ -1632,11 +1725,34 @@ namespace conversion
     {
         return mc_command(false, MC_DATA_CMD_ID, MC_GET_VARIABLE_VALUE(var.comp_info.varIndex));
     }
-    CommandFactory::_This CommandFactory::compare          (const std::string& locationType,
-                                                            const std::string& lhs,
-                                                            const bool eq,
-                                                            const std::string& rhs,
-                                                            const bool rhsIsConstant)
+    CommandFactory::_This CommandFactory::compareNull   (const bool scoreboard, const std::string& where, const bool eq)
+    {
+        context.currentBlockID = 0;
+        auto destreg = getFreeComparisonRegister();
+        destreg->vacant = false;
+     
+        destreg->operation = eq ? comparison_operation_type::EQ : comparison_operation_type::NEQ;
+     
+     
+        if (scoreboard)
+        {
+            mc_command cmd(false, MC_SCOREBOARD_CMD_ID, MC_COMPARE_REG_SET(destreg->id, "1"));
+            cmd.ifint(where, destreg->operation, "0", true, eq);
+
+            add(cmd);
+        }
+        else
+        {
+            // if we can merge the contents of the variable into temp, then it is not 0, and not null.
+            create_and_push(MC_SCOREBOARD_CMD_ID, MC_TEMP_STORAGE_SCOREBOARD_SET_RAW_CONST("0"));
+            add(makeCopyStorage(MC_TEMP_STORAGE_NAME, where).storeSuccess(PADR(score) MC_COMPARE_REG_FULL(destreg->id)));
+
+
+        }
+        context.lastComparison = destreg;
+        return THIS;
+    }
+    std::shared_ptr<comparison_register> CommandFactory::getFreeComparisonRegister()
     {
         std::shared_ptr<comparison_register> reg = context.getFreeComparisonRegister();
 
@@ -1650,6 +1766,15 @@ namespace conversion
 
             reg = context.comparisonRegisters[id];
         }
+        return reg;
+    }
+    CommandFactory::_This CommandFactory::compare          (const std::string& locationType,
+                                                            const std::string& lhs,
+                                                            const bool eq,
+                                                            const std::string& rhs,
+                                                            const bool rhsIsConstant)
+    {
+        std::shared_ptr<comparison_register> reg = getFreeComparisonRegister();
 
         reg->vacant = false;
         context.currentBlockID = 0;
@@ -1663,12 +1788,12 @@ namespace conversion
         if (locationType == "data")
         {
             m.ifcmp(PADR(storage) INS_L(lhs),
-                operation, reg->id,
+                operation,
                     PADR(storage) INS_L(rhs));
         }
         else if (locationType == "score")
         {
-            m.ifint(lhs, operation, reg->id, rhs, rhsIsConstant, !eq);
+            m.ifint(lhs, operation, rhs, rhsIsConstant, !eq);
         }
         else
             WARN("Unknown comparison operation flag.");
@@ -1710,6 +1835,12 @@ namespace conversion
                                             SEP
                                         MC_DATA(set from storage, INS_L(src)));
         return THIS;
+    }
+    mc_command CommandFactory::makeCopyStorage              (const std::string& dest, const std::string& src)
+    {
+        return mc_command(false, MC_DATA_CMD_ID, MC_DATA(modify storage, INS(dest))
+                                            SEP
+                                        MC_DATA(set from storage, INS_L(src)));
     }
     CommandFactory::_This CommandFactory::createVariable   (rs_variable& var)
     {

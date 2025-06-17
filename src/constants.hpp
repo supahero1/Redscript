@@ -34,6 +34,7 @@
     {"else", {token_type::KW_ELSE,0}}, \
     {"elif", {token_type::KW_ELIF,0}}, \
     {"or", {token_type::KW_OR,0}}, \
+    {"not", {token_type::KW_NOT,0}}, \
     {"and", {token_type::KW_AND,0}}, \
     {"null", {token_type::KW_NULL,0}}, \
     {"asm", {token_type::KW_ASM,0}}}

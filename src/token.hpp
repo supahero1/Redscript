@@ -36,7 +36,7 @@ enum class token_type
     SYMBOL,
 
     /* -- KEYWORDS -- */
-    KW_OR, KW_AND,
+    KW_OR, KW_AND, KW_NOT,
     KW_TRUE, KW_FALSE,
 
     TYPE_DEF,

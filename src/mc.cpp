@@ -54,7 +54,7 @@ mc_command::_This mc_command::ifcmpreg(comparison_operation_type t, int rid)
     body = s + " score " MC_COMPARE_REG_GET_RAW(INS_L(STR(rid))) + k + body;
     return THIS;
 }
-mc_command::_This mc_command::ifcmp(const std::string &lhs, comparison_operation_type t, int id, const std::string &rhs, bool negate)
+mc_command::_This mc_command::ifcmp(const std::string &lhs, comparison_operation_type t, const std::string &rhs, bool negate)
 {
     using T = comparison_operation_type;
 
@@ -84,7 +84,7 @@ mc_command::_This mc_command::ifcmp(const std::string &lhs, comparison_operation
     }
     return THIS;
 }
-mc_command::_This mc_command::ifint(const std::string &lhs, comparison_operation_type t, int id, const std::string &rhs, bool constant, bool negate)
+mc_command::_This mc_command::ifint(const std::string &lhs, comparison_operation_type t, const std::string &rhs, bool constant, bool negate)
 {
     using T = comparison_operation_type;
     std::string k = body.starts_with("if") ? SEP : " run ";
@@ -126,7 +126,6 @@ mc_command::_This mc_command::ifint(const std::string &lhs, comparison_operation
     body = (negate ? "unless score " : "if score ") + lhs + SEP + op + SEP + rhs + k + body;
     return THIS;
 }
-
 mc_command::_This mc_command::store(bool result, const std::string &where)
 {
     switch (cmd)
@@ -156,6 +155,10 @@ mc_command::_This mc_command::store(bool result, const std::string &where)
 mc_command::_This mc_command::storeSuccess(const std::string &where)
 {
     return store(false, where);
+}
+mc_command::_This mc_command::storeSuccess(const std::string &where, const std::string &dataType, int scale)
+{
+    return store(false, where + " " + dataType + " " + std::to_string(scale));
 }
 mc_command::_This mc_command::storeResult(const std::string &where, const std::string &dataType, int scale)
 {

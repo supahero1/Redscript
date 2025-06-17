@@ -36,10 +36,11 @@ struct mc_command
     _This storeResult(const std::string& where, const std::string& dataType, int scale);
     _This storeResult(const std::string& where);
     _This storeSuccess(const std::string& where);
+    _This storeSuccess(const std::string &where, const std::string &dataType, int scale);
 
     _This ifcmpreg(comparison_operation_type t, int id);
-    _This ifcmp(const std::string& lhs, comparison_operation_type t, int id, const std::string& rhs, bool negate = false);
-    _This ifint   (const std::string& lhs, comparison_operation_type t, int id, const std::string& rhs, bool constant, bool negate = false);
+    _This ifcmp(const std::string& lhs, comparison_operation_type t, const std::string& rhs, bool negate = false);
+    _This ifint   (const std::string& lhs, comparison_operation_type t, const std::string& rhs, bool constant, bool negate = false);
 };
 
 typedef std::vector<mc_command> mccmdlist;

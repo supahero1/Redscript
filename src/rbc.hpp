@@ -37,6 +37,7 @@ enum class rbc_instruction
     ENDIF,
     ELSE,
     RET,
+    SAVERET,
     PUSH,
     POP,
     INC, // inc scope
@@ -71,6 +72,8 @@ enum class rbc_function_decorator
     SINGLE,  // functions with 1 single call, redundant to compile.
     CPP,
     NOCOMPILE,
+    NORETURN,
+    WRAPPER,
     UNKNOWN
 };
 
@@ -84,6 +87,10 @@ public:
         if (val_type == token_type::STRING_LITERAL)
             val = '"' + val + '"';
     }
+    inline std::string quoted()
+    {
+        return '"' + val + '"';
+    } 
     const token_type val_type; 
     std::string       val;
     raw_trace_info* trace = nullptr;
@@ -207,6 +214,7 @@ namespace rbc_commands
     {
         rbc_command create(std::shared_ptr<rs_variable> v, rbc_value val);
         rbc_command create(std::shared_ptr<rs_variable> v);
+        rbc_command storeReturn(std::shared_ptr<rs_variable> v);
         rbc_command set(std::shared_ptr<rs_variable> v, rbc_value val);
     };
 };
@@ -222,6 +230,9 @@ namespace conversion
         using _This = CommandFactory&;
     private:
         bool _nonConditionalFlag = false;
+
+        bool _useBuffer = false;
+
         mccmdlist commands;
         mc_program& context;
         rbc_program& rbc_compiler;
@@ -234,12 +245,18 @@ namespace conversion
             return THIS;
         }
     public:
+
+        std::shared_ptr<mccmdlist> _buffer;
+
         CommandFactory(mc_program& _context, rbc_program& _rbc_compiler) : context(_context), rbc_compiler(_rbc_compiler)
         {}
         inline void add(mc_command& c)
         { 
             make(c);
-            commands.push_back(c);
+            if (_useBuffer)
+                _buffer->push_back(c);
+            else 
+                commands.push_back(c);
         }
         template<typename... Tys>
         inline void create_and_push(Tys&&... t)
@@ -261,6 +278,24 @@ namespace conversion
         {
             commands.pop_back();
         }
+#pragma region buffer
+        inline void createBuffer()
+        {if(!_buffer) _buffer = std::make_shared<mccmdlist>();}
+        inline void enableBuffer()
+        {_useBuffer = true;}
+        inline bool usingBuffer()
+        {return _useBuffer;}
+        inline void disableBuffer()
+        {_useBuffer = false;}
+        inline void clearBuffer()
+        {if(_buffer)_buffer->clear();}
+        inline void addBuffer()
+        {
+            if(!_buffer) return;
+
+            commands.insert(commands.end(), _buffer->begin(), _buffer->end());
+        }
+#pragma endregion buffer
         void make(mc_command& in);
 
         void initProgram    ();
@@ -274,7 +309,11 @@ namespace conversion
         _This popParameter   ();
         _This invoke         (const std::string& module, rbc_function& func);
         _This Return         (bool val);
+        _This compareNull    (const bool scoreboard, const std::string& where, const bool eq);
         _This compare        (const std::string& locationType, const std::string& lhs, const bool eq, const std::string& rhs, const bool rhsIsConstant = false);
+
+        std::shared_ptr<comparison_register> getFreeComparisonRegister();
+        static mc_command makeCopyStorage (const std::string& dest, const std::string& src);
         static mc_command getVariableValue(rs_variable& var);
         static mc_command getRegisterValue(rbc_register& reg);
         static mc_command getStackValue   (long index);

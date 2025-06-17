@@ -1,8 +1,9 @@
 use lang;
-x: int = 4;
+
+x: int = 1;
 
 
-if (x)
+if (x + 44)
 {
     msg(@r, "X is true (technically x != 0)");
 }
@@ -10,3 +11,4 @@ else
 {
     msg(@r, "X is false (technically x == 0)");
 }
+

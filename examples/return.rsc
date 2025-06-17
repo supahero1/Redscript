@@ -12,19 +12,15 @@ method: any|void return_if_even(x: any)
             }
             msg(@r, x);
             return x;
+            msg(@r, "Is odd!");
         }
         msg(@r, "Didnt work!");
     }
     if (x * 4 == 4 * 4)
     {
         msg(@r, "Running do stuff...");
-        _do_stuff();
-        return;
     }
-    // TODO: every function should terminate with a return 0
-    msg(@r, "Nothing happened!");
-    return;
-}
-stuff: int = 44;
+    _do_stuff();
 
-return_if_even(4);
+}
+return_if_even(3);

@@ -14,7 +14,9 @@
 #pragma region variables
 
 #define MC_VARIABLE_VALUE(id) ARR_AT(RS_PROGRAM_VARIABLES, STR(id)) ".value"
+#define MC_VARIABLE_TYPE(id) ARR_AT(RS_PROGRAM_VARIABLES, STR(id)) ".type"
 #define MC_VARIABLE_VALUE_FULL(id) RS_PROGRAM_STORAGE SEP MC_VARIABLE_VALUE(id)
+#define MC_VARIABLE_TYPE_FULL(id) RS_PROGRAM_STORAGE SEP MC_VARIABLE_TYPE(id)
 #define MC_GET_VARIABLE_VALUE(id) MC_DATA(get storage, MC_VARIABLE_VALUE(id))
 
 #define MC_VARIABLE_JSON(data, scope, type) "{\"value\":" data ",\"scope\":" INS(scope) ",\"type\":" INS(type) "}"
@@ -29,6 +31,8 @@
 
 #pragma region registers
 #define MC_COMPARE_REG(id) "cmp" INS_L(STR(id))
+#define MC_COMPARE_REG_FULL(id) RBC_REGISTER_PLAYER " cmp" INS_L(STR(id))
+
 #define MC_OPERABLE_REG_RAW(id) "r" id
 #define MC_OPERABLE_REG(id) RBC_REGISTER_PLAYER SEP MC_OPERABLE_REG_RAW(id)
 #define MC_CREATE_OPERABLE_REG(id, criteria) PADR(objectives add) MC_OPERABLE_REG_RAW(INS(STR(id))) SEP criteria SEP "\"" INS(STR(id)) "\""
@@ -85,5 +89,6 @@
 #define MC_TEMP_SCOREBOARD_STORAGE RBC_REGISTER_PLAYER SEP MC_TEMP_STORAGE_NAME
 #define MC_TEMP_STORAGE_SET_CONST(val) MC_DATA(set storage, MC_TEMP_STORAGE) PAD(set value) INS_L(val)
 #define MC_TEMP_STORAGE_SCOREBOARD_SET_CONST(val) PADR(players set) MC_TEMP_SCOREBOARD_STORAGE SEP INS_L(val)
+#define MC_TEMP_STORAGE_SCOREBOARD_SET_RAW_CONST(val) PADR(players set) MC_TEMP_SCOREBOARD_STORAGE SEP val
 
 #pragma endregion temporary_storage
