@@ -304,7 +304,9 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
     rbc_program program(err);
     
     long _At = 0;
-
+#pragma region global_flags
+    bool _flag_parsingelif = false;
+#pragma endregion
     // overriding if not set.
     err->trace.at = std::make_shared<long>(_At);
     err->content  = std::make_shared<std::string>(content);
@@ -914,9 +916,11 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
         }
         case token_type::KW_IF:
         {
+        _parseif:
             if (!adv() || current->type != token_type::BRACKET_OPEN)
                 COMP_ERROR(RS_SYNTAX_ERROR, "Unexpected token.");
-            
+                
+        _parseifagain: // for and and or keywords
             if(!adv())
                 COMP_ERROR(RS_SYNTAX_ERROR, "Expected expression, not EOF.");
             // br = true as if we hit the closing bracket of the if statement we should return.
@@ -931,7 +935,7 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
 
             if (current->type == token_type::BRACKET_CLOSED)
             {
-                program(rbc_command(rbc_instruction::IF, lVal));
+                program(rbc_command(_flag_parsingelif ? rbc_instruction::ELIF : rbc_instruction::IF, lVal));
             end_if_parse:
                 if (!adv())
                     COMP_ERROR(RS_EOF_ERROR, "Unexpected EOF.");
@@ -940,7 +944,7 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
                     COMP_ERROR(RS_SYNTAX_ERROR, "Unexpected token.");
                 
                 program.currentScope++;
-                program.scopeStack.push(rbc_scope_type::IF);
+                program.scopeStack.push(_flag_parsingelif ? rbc_scope_type::ELIF : rbc_scope_type::IF);
                 break;
             }
 
@@ -961,12 +965,32 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             rbc_value rVal = right.rbc_evaluate(program, err);
             if(err->trace.ec)
                 return program;
+            token_type t = current->type;
 
-            if (current->type != token_type::BRACKET_CLOSED)
-                COMP_ERROR(RS_SYNTAX_ERROR, "Unexpected token.");
-            program(rbc_command(rbc_instruction::IF, lVal, rbc_constant(compop, op.repr, &op.trace), rVal));
+            switch(t)
+            {
+                case token_type::KW_AND:
+                case token_type::KW_OR:
+                    if(!adv())
+                        COMP_ERROR(RS_SYNTAX_ERROR, "Expected expression, not EOF.");
+                    goto _parseifagain;
+                case token_type::BRACKET_CLOSED:
+                    break;
+                default:
+                    COMP_ERROR(RS_SYNTAX_ERROR, "Unexpected token.");
+
+            }
+            program(rbc_command(_flag_parsingelif ? rbc_instruction::ELIF : rbc_instruction::IF, lVal, rbc_constant(compop, op.repr, &op.trace), rVal));
             
             goto end_if_parse;
+        }
+        case token_type::KW_ELIF:
+        {
+
+            if (program.lastScope != rbc_scope_type::IF && program.lastScope != rbc_scope_type::ELIF)
+                COMP_ERROR(RS_SYNTAX_ERROR, "elif blocks can only be used after an if block.");
+            _flag_parsingelif = true;
+            goto _parseif;
         }
         case token_type::KW_ELSE:
         {
@@ -1263,8 +1287,10 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                 case rbc_instruction::IF:
                 case rbc_instruction::NIF:
                 {
+                _parseif:
                     RS_ASSERT_SIZE(size > 0);
                     const bool invertFlag = instruction.type == rbc_instruction::NIF;
+
                     if (size == 1)
                     {
                         // bool convertable if statement
@@ -1316,26 +1342,26 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                             case 1:
                             {
                                 rbc_register& reg = *std::get<1>(param);
-                                auto cmpreg = factory.getFreeComparisonRegister();
-
+                                std::shared_ptr<comparison_register> outReg = nullptr;
                                 if (reg.operable)
                                 {
-
-
                                     // makes reg if needed
-                                    factory.compareNull(true, MC_OPERABLE_REG(INS_L(STR(reg.id))), !invertFlag);
+                                    outReg = factory.compareNull(true, MC_OPERABLE_REG(INS_L(STR(reg.id))), !invertFlag);
                                 }
                                 else
                                 {
-                                    factory.compareNull(false, MC_NOPERABLE_REG(reg.id), !invertFlag);
+                                    outReg = factory.compareNull(false, MC_NOPERABLE_REG(reg.id), !invertFlag);
                                     // see if contents is also not 0
                                 }
+                                mcprogram.blocks.push({0, outReg});
                                 break;
                             }
                             case 2:
                             {
                                 rs_variable& var = *std::get<2>(param);
-                                factory.compareNull(false, MC_VARIABLE_VALUE(var.comp_info.varIndex), !invertFlag);
+                                std::shared_ptr<comparison_register> outReg = factory.compareNull(false, MC_VARIABLE_VALUE(var.comp_info.varIndex), !invertFlag);
+                                
+                                mcprogram.blocks.push({0, outReg});
                                 break;
                             }
                             default:
@@ -1345,8 +1371,6 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                     }
                     
                     RS_ASSERT_SIZE(size == 3);
-                    mcprogram.currentBlockID = 0;
-                    mcprogram.blocks.push(0);
                     rbc_value& lhs = *instruction.parameters.at(0);
                     rbc_constant& op = std::get<0>(*instruction.parameters.at(1));
                     bool eq = op.val == "==";
@@ -1355,6 +1379,7 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                     rbc_value& rhs = *instruction.parameters.at(2);
 
                     // commutative check, as no values are modified
+                    std::shared_ptr<comparison_register> usedRegister = nullptr;
                     if (lhs.index() == rhs.index())
                     {
                         switch(lhs.index())
@@ -1378,13 +1403,13 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                                     rbc_register& noperable = reg2.operable ? reg  : reg2; 
                                     factory.add( factory.getRegisterValue(noperable).storeResult(PADR(scoreboard) MC_TEMP_SCOREBOARD_STORAGE) );
 
-                                    factory.compare("score", MC_OPERABLE_REG(INS_L(STR(operable.id))), eq, MC_TEMP_SCOREBOARD_STORAGE);
+                                    usedRegister = factory.compare("score", MC_OPERABLE_REG(INS_L(STR(operable.id))), eq, MC_TEMP_SCOREBOARD_STORAGE);
                                 }
                                 // both are either operable or not operable
                                 else if (reg.operable)
-                                    factory.compare("score", MC_OPERABLE_REG(INS_L(STR(reg.id))), eq, MC_OPERABLE_REG(INS_L(STR(reg2.id))));
+                                    usedRegister = factory.compare("score", MC_OPERABLE_REG(INS_L(STR(reg.id))), eq, MC_OPERABLE_REG(INS_L(STR(reg2.id))));
                                 else // TODO fix NOPERABLE_REG_GET: not raw, has extra commands at start
-                                    factory.compare("data", MC_NOPERABLE_REG_GET(reg.id), eq, MC_NOPERABLE_REG_GET(reg2.id));
+                                    usedRegister = factory.compare("data", MC_NOPERABLE_REG_GET(reg.id), eq, MC_NOPERABLE_REG_GET(reg2.id));
                                 break;
                             }
                             case 2:
@@ -1392,7 +1417,7 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                                 rs_variable& var  = *std::get<2>(lhs);
                                 rs_variable& var2 = *std::get<2>(rhs);
 
-                                factory.compare("data", RS_PROGRAM_STORAGE SEP MC_VARIABLE_VALUE(var.comp_info.varIndex), eq,
+                                usedRegister = factory.compare("data", RS_PROGRAM_STORAGE SEP MC_VARIABLE_VALUE(var.comp_info.varIndex), eq,
                                                         RS_PROGRAM_STORAGE SEP MC_VARIABLE_VALUE(var.comp_info.varIndex));
 
                                 break;
@@ -1413,15 +1438,15 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
 
                             if (reg.operable)
                             {
-                                factory.compare("score", MC_OPERABLE_REG(INS_L(STR(reg.id))), eq, con.val, true);
+                                usedRegister = factory.compare("score", MC_OPERABLE_REG(INS_L(STR(reg.id))), eq, con.val, true);
                             }
                             else
                             {
                                 factory.create_and_push(MC_DATA_CMD_ID, MC_TEMP_STORAGE_SET_CONST(con.val));
                                 // TODO: fix to not have leading keywords!
-                                factory.compare("data", MC_NOPERABLE_REG_GET(reg.id), eq, MC_TEMP_STORAGE);
+                                usedRegister = factory.compare("data", MC_NOPERABLE_REG_GET(reg.id), eq, MC_TEMP_STORAGE);
                             }
-                            break;
+                            goto _end;
                         }
                         }
                         {
@@ -1437,8 +1462,8 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                                 factory.getRegisterValue(reg).storeResult(PADR(storage) MC_TEMP_STORAGE, "int", 1);
                             else
                                 factory.copyStorage(MC_TEMP_STORAGE, MC_NOPERABLE_REG_GET(reg.id));
-                            factory.compare("data", MC_VARIABLE_VALUE_FULL(var.comp_info.varIndex), eq, MC_TEMP_STORAGE);
-                            break;
+                            usedRegister = factory.compare("data", MC_VARIABLE_VALUE(var.comp_info.varIndex), eq, MC_TEMP_STORAGE);
+                            goto _end;
                         }
                         }
                         {
@@ -1450,39 +1475,47 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                             rs_variable&  var = *(*res.i1);
                             rbc_constant& con = *res.i2;
                             
-                            factory.create_and_push(MC_DATA_CMD_ID, MC_TEMP_STORAGE_SET_CONST(con.val));
-                            factory.compare("data", MC_VARIABLE_VALUE_FULL(var.comp_info.varIndex), eq, MC_TEMP_STORAGE);
-                            break;
+                            usedRegister = factory.compare("data", MC_VARIABLE_VALUE(var.comp_info.varIndex), eq, con.val, true);
+                            goto _end;
                         }
                         }
                     }
+                _end:
+                    mcprogram.blocks.push({0, usedRegister});
                     break;
                 }
                 case rbc_instruction::ELSE:
                 {
                     // pop the if off the blocks.
+                    auto& block = mcprogram.blocks.top();
+                    
+                    auto reg = block.second;
+                    
                     mcprogram.blocks.pop();
-                    mcprogram.currentBlockID = 1;
-                    mcprogram.blocks.push(1);
+                    mcprogram.blocks.push({1, reg});
                     // todo
                     break;
                 }
+                case rbc_instruction::ELIF:
+                {   
+                    auto& block = mcprogram.blocks.top();
+                    
+                    auto reg = block.second;
+                    
+                    mcprogram.blocks.pop();
+                    mcprogram.blocks.push({2, reg});
+                    goto _parseif;
+                }
                 case rbc_instruction::ENDIF:
                 {
+                    auto& block = mcprogram.blocks.top();
+                    block.second->vacant = true;
+
                     mcprogram.blocks.pop();
-
-                    if (mcprogram.blocks.size() > 0)
-                        mcprogram.currentBlockID = mcprogram.blocks.top();
-                    else
-                        mcprogram.currentBlockID = -1;
-
-                    // if the parent block is an if statement
-                    if (mcprogram.currentBlockID == 0)
-                        mcprogram.lastComparison = mcprogram.comparisonRegisters.at(mcprogram.lastComparison->id - 1);
-                    else
-                        mcprogram.lastComparison = nullptr;
-
-                   
+                    
+                    // we have an elif
+                    if (mcprogram.blocks.size() > 0 && mcprogram.blocks.top().first == 2)
+                        mcprogram.blocks.pop();
                     break;
                 }
                 case rbc_instruction::RET:
@@ -1559,7 +1592,7 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
         return list;
     };
     
-    // try{
+    try{
         mcprogram.globalFunction.commands = parseFunction(program.globalFunction.instructions);
 
         for(auto& function : program.functions)
@@ -1574,13 +1607,12 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                 mcprogram.functions.insert({function.first, mc_function{parseFunction(function.second->instructions)}});
             }
         }
-    // } catch (std::exception& e)
-    // {
-    //     throw e;
-    //     err = std::string("Internal error: ") + e.what();
-    //     return mcprogram;
-    // }
-    // call at end so the number of registers is accurate.
+    } catch (std::exception& e)
+    {
+        throw e;
+        err = std::string("Internal error: ") + e.what();
+        return mcprogram;
+    }
     factory.initProgram();
     mccmdlist init = factory.package();
     mcprogram.globalFunction.commands.insert(mcprogram.globalFunction.commands.begin(), init.begin(), init.end());
@@ -1725,14 +1757,13 @@ namespace conversion
     {
         return mc_command(false, MC_DATA_CMD_ID, MC_GET_VARIABLE_VALUE(var.comp_info.varIndex));
     }
-    CommandFactory::_This CommandFactory::compareNull   (const bool scoreboard, const std::string& where, const bool eq)
+    std::shared_ptr<comparison_register> CommandFactory::compareNull   (const bool scoreboard, const std::string& where, const bool eq)
     {
-        context.currentBlockID = 0;
         auto destreg = getFreeComparisonRegister();
         destreg->vacant = false;
      
         destreg->operation = eq ? comparison_operation_type::EQ : comparison_operation_type::NEQ;
-     
+        
      
         if (scoreboard)
         {
@@ -1746,11 +1777,9 @@ namespace conversion
             // if we can merge the contents of the variable into temp, then it is not 0, and not null.
             create_and_push(MC_SCOREBOARD_CMD_ID, MC_TEMP_STORAGE_SCOREBOARD_SET_RAW_CONST("0"));
             add(makeCopyStorage(MC_TEMP_STORAGE_NAME, where).storeSuccess(PADR(score) MC_COMPARE_REG_FULL(destreg->id)));
-
-
         }
-        context.lastComparison = destreg;
-        return THIS;
+
+        return destreg;
     }
     std::shared_ptr<comparison_register> CommandFactory::getFreeComparisonRegister()
     {
@@ -1768,7 +1797,7 @@ namespace conversion
         }
         return reg;
     }
-    CommandFactory::_This CommandFactory::compare          (const std::string& locationType,
+    std::shared_ptr<comparison_register> CommandFactory::compare          (const std::string& locationType,
                                                             const std::string& lhs,
                                                             const bool eq,
                                                             const std::string& rhs,
@@ -1777,50 +1806,78 @@ namespace conversion
         std::shared_ptr<comparison_register> reg = getFreeComparisonRegister();
 
         reg->vacant = false;
-        context.currentBlockID = 0;
 
-        // TODO
-        comparison_operation_type operation = eq ? comparison_operation_type::EQ : comparison_operation_type::NEQ;
-        reg->operation = operation;
-
-        create_and_push(MC_SCOREBOARD_CMD_ID, MC_COMPARE_RESET(reg->id));
-        mc_command m{false, MC_EXEC_CMD_ID, PADR(scoreboard players set) MC_COMPARE_REG_GET_RAW(INS(STR(reg->id))) PADL(1)};
         if (locationType == "data")
         {
-            m.ifcmp(PADR(storage) INS_L(lhs),
-                operation,
-                    PADR(storage) INS_L(rhs));
+
+
+            // copy storage value to storage temp
+            // try copy rhs to storage temp, and store success in next comparison register
+            // invert operation
+            reg->operation = eq ? comparison_operation_type::NEQ : comparison_operation_type::EQ;
+            if (rhsIsConstant)
+            {
+                create_and_push(MC_DATA_CMD_ID, MC_TEMP_STORAGE_SET_CONST(rhs));
+                mc_command cmd = makeCopyStorage(MC_TEMP_STORAGE_NAME, lhs).storeSuccess(PADR(score) MC_COMPARE_REG_FULL(reg->id));
+                add(cmd);
+            }
+            else
+            {
+                mc_command cmd = makeCopyStorage(MC_TEMP_STORAGE_NAME, rhs).storeSuccess(PADR(score) MC_COMPARE_REG_FULL(reg->id));
+                copyStorage(MC_TEMP_STORAGE_NAME, lhs);
+                add(cmd);
+
+            }
+
         }
         else if (locationType == "score")
         {
-            m.ifint(lhs, operation, rhs, rhsIsConstant, !eq);
+            create_and_push(MC_SCOREBOARD_CMD_ID, MC_COMPARE_RESET(reg->id));
+            reg->operation = eq ? comparison_operation_type::EQ : comparison_operation_type::NEQ;
+            mc_command m{false, MC_SCOREBOARD_CMD_ID, PADR(players set) MC_COMPARE_REG_GET_RAW(INS(STR(reg->id))) PADL(1)};
+
+            m.ifint(lhs, reg->operation, rhs, rhsIsConstant, !eq);
+
+            add(m);
         }
         else
             WARN("Unknown comparison operation flag.");
 
-        // store result
-        add(m);
-        context.lastComparison = reg;
-
-
-        return THIS;
+        return reg;
 
     }
 
     void                  CommandFactory::make             (mc_command& cmd)
     {
-        if (!context.lastComparison || context.currentBlockID == -1 || _nonConditionalFlag)
+        if (context.blocks.size() == 0 || _nonConditionalFlag)
             return;
-
-        if (!cmd.isexec())
+        auto iter = context.blocks.end();
+        while (iter != context.blocks.begin())
         {
-            cmd.addroot();
-            cmd.cmd = MC_EXEC_CMD_ID;
+            iter--;
+            auto& block = *iter;
+            auto& blockRegister = *block.second;
+            switch(block.first)
+            {
+                case 0:
+                    // used to use comparison_operation_type::EQ
+                    cmd.ifcmpreg(blockRegister.operation, blockRegister.id);
+                    break;
+                case 1:
+                case 2:
+                {
+                    comparison_operation_type opposite = blockRegister.operation == comparison_operation_type::EQ ? comparison_operation_type::NEQ : comparison_operation_type::EQ;
+                    cmd.ifcmpreg(opposite, blockRegister.id);
+                    break;
+                }
+                default: // TODO: add elif
+                    break;
+            }
         }
-        if (context.currentBlockID == 0)
-            cmd.ifcmpreg(comparison_operation_type::EQ, context.lastComparison->id);
-        else if (context.currentBlockID == 1)
-            cmd.ifcmpreg(comparison_operation_type::NEQ, context.lastComparison->id);
+
+
+        cmd.cmd = MC_EXEC_CMD_ID;
+        
         // etc...
 
     }

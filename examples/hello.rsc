@@ -1,11 +1,12 @@
 // flag strict; disables invalid typing such as: x:int = "Hello!";
 use lang;
 
+
 object minimal_player
 {
-    required health: int!;
+    required health: int = "hello";
     required name  : string!;
-
+    required|optional|seperate <field> : <type>? =? val?;
 }
 
 // causes seg fault
@@ -13,7 +14,6 @@ object minimal_player
 // {
 //    msg();
 // }
-
 minimal_player = (minimal_player) getPlayer("Gregory");
 
 y: int? = 4;
@@ -23,3 +23,5 @@ z: int = 4;
 msg(@p[score>z], "You're doing good!");
 
 msg(@p, x);
+
+x: int! = doSomething() + 4;

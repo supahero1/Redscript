@@ -1,5 +1,16 @@
 use lang;
 
+object player
+{
+    health: int! = 4;
+
+    method compare(health, uuid);
+}
+
+// OR, AND
+// object accessing: x.y.z.w
+// inb library 
+
 method: void dostuff(x: int)
 {
     y = x * 2;

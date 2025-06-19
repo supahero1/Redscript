@@ -3,7 +3,6 @@ use math;
 // type path_selector: block;
 method: void msg   (_p: selector!, _msg: string!)      extern __cpp__;
 
-
 // method<T, T1>: void msg   (_p: selector!, [T, T1]...);
 
 method: void kill  (_p: selector!)                     extern __cpp__;

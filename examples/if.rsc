@@ -4,7 +4,14 @@ method: void tell_player_is_odd_or_even(num: int)
 {
     if (num % 2 == 0)
     {
-        return "X is even";
+        if (num == 2)
+        {
+            return "X is just about even!";
+        }
+        else
+        {
+            return "X is even, but not 2!";
+        }
     }
     else
     {
@@ -12,7 +19,7 @@ method: void tell_player_is_odd_or_even(num: int)
     }
 }
 y: string! = "The value of x is:";
-x: string! = tell_player_is_odd_or_even(45);
-msg(@r, "Running program..");
+x: string! = tell_player_is_odd_or_even(44);
+msg(@r, "Running program...");
 msg(@r, y);
 msg(@r, x);

@@ -32,10 +32,14 @@ enum class rbc_instruction
     NEQ,
     GT,
     LT,
+
     IF,
     NIF,
     ENDIF,
     ELSE,
+    ELIF,
+    NELIF,
+    
     RET,
     SAVERET,
     PUSH,
@@ -309,8 +313,8 @@ namespace conversion
         _This popParameter   ();
         _This invoke         (const std::string& module, rbc_function& func);
         _This Return         (bool val);
-        _This compareNull    (const bool scoreboard, const std::string& where, const bool eq);
-        _This compare        (const std::string& locationType, const std::string& lhs, const bool eq, const std::string& rhs, const bool rhsIsConstant = false);
+        std::shared_ptr<comparison_register> compareNull    (const bool scoreboard, const std::string& where, const bool eq);
+        std::shared_ptr<comparison_register> compare        (const std::string& locationType, const std::string& lhs, const bool eq, const std::string& rhs, const bool rhsIsConstant = false);
 
         std::shared_ptr<comparison_register> getFreeComparisonRegister();
         static mc_command makeCopyStorage (const std::string& dest, const std::string& src);

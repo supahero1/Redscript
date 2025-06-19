@@ -6,6 +6,7 @@
 #include "error.hpp"
 #include "bst.hpp"
 #include "mchelpers.hpp"
+#include "util.hpp"
 
 #define MC_DATA_CMD_ID 0
 #define MC_EXEC_CMD_ID 1
@@ -61,9 +62,7 @@ struct comparison_register
 struct mc_program
 {
     uint varStackCount = 0;
-    std::shared_ptr<comparison_register> lastComparison = nullptr;
-    int currentBlockID = -1; // 0: if, 1: elif, 2: else, 3:...
-    std::stack<int> blocks;
+    iterable_stack<std::pair<int, std::shared_ptr<comparison_register>>> blocks;
     std::vector<std::shared_ptr<comparison_register>> comparisonRegisters;
     std::unordered_map<std::string, mc_function> functions;
     mc_function* currentFunction = nullptr;

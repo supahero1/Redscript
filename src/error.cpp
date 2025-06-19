@@ -13,7 +13,7 @@ void printerr(rs_error& error)
     bool hasEnd = error.trace.start != -1;
     if (hasEnd)
     {
-        for(int i = 0; i < error.trace.start; i++) errorHighlight << ' ';
+        for(int i = 0; i < error.trace.start - 1; i++) errorHighlight << ' ';
         for(int i = error.trace.start; i < error.trace.caret + 1; i++) errorHighlight << '^';
     }
     else

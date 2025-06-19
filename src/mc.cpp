@@ -37,7 +37,7 @@ mc_command::_This mc_command::addroot()
 mc_command::_This mc_command::ifcmpreg(comparison_operation_type t, int rid)
 {
     std::string k;
-    if (body.starts_with("if")) // dont add run keyword
+    if (body.starts_with("if") || isexec()) // dont add run keyword
         k = " matches 1 ";
     else
         k = " matches 1 run ";
@@ -87,7 +87,9 @@ mc_command::_This mc_command::ifcmp(const std::string &lhs, comparison_operation
 mc_command::_This mc_command::ifint(const std::string &lhs, comparison_operation_type t, const std::string &rhs, bool constant, bool negate)
 {
     using T = comparison_operation_type;
-    std::string k = body.starts_with("if") ? SEP : " run ";
+    // execute if score _CPU r0 matches 0 <run> scoreboard players set _CPU cmp0 1
+
+    std::string k = body.starts_with("if") || isexec() ? SEP : " run ";
 
     if (!isexec())
     {

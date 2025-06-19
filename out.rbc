@@ -1,25 +1,20 @@
-tell_player_is_odd_or_even:
-	SAVE (reg){(id=0) op=1, vacant=1}, {{num, 0, 0, 43}, name=num, scope=1, typeinf=1, (g=0, c=0)}
-	MATH (reg){(id=0) op=1, vacant=1}, (const){T=2, v=2}, (const){T=2, v=4}
-	IF (reg){(id=0) op=1, vacant=1}, (const){T=18, v===}, (const){T=2, v=0}
-	RET (const){T=1, v=X is even}
-	ELSE
-	RET (const){T=1, v=X is odd}
-	ENDIF
 kill:
 msg:
-CREATE {{y, 0, 0, 1}, name=y, scope=0, typeinf=4!, (g=1, c=0)}, (const){T=1, v=The value of x is:}
-PUSH (const){T=1, v=tell_player_is_odd_or_even}, (const){T=1, v=num}, (const){T=2, v=45}
-CALL (const){T=1, v=tell_player_is_odd_or_even}
-POP 
-CREATE {{x, 0, 0, 1}, name=x, scope=0, typeinf=4!, (g=1, c=0)}
-{{x, 0, 0, 1}, name=x, scope=0, typeinf=4!, (g=1, c=0)}
+CREATE {{x, 0, 0, 1}, name=x, scope=0, typeinf=-1, (g=1, c=0)}, (const){T=2, v=68}
+IF {{x, 0, 0, 1}, name=x, scope=0, typeinf=-1, (g=1, c=0)}, (const){T=18, v===}, (const){T=2, v=2}
 PUSH (const){T=1, v=msg}, (const){T=1, v=_msg}, (const){T=6, v=r}
-PUSH (const){T=1, v=msg}, (const){T=1, v=_p}, (const){T=1, v=Running program..}
+PUSH (const){T=1, v=msg}, (const){T=1, v=_p}, (const){T=1, v=X is 2}
 CALL (const){T=1, v=msg}
+{{x, 0, 0, 1}, name=x, scope=0, typeinf=-1, (g=1, c=0)}, (const){T=18, v===}, (const){T=2, v=4}
 PUSH (const){T=1, v=msg}, (const){T=1, v=_msg}, (const){T=6, v=r}
-PUSH (const){T=1, v=msg}, (const){T=1, v=_p}, {{y, 0, 0, 1}, name=y, scope=0, typeinf=4!, (g=1, c=0)}
+PUSH (const){T=1, v=msg}, (const){T=1, v=_p}, (const){T=1, v=X is 4}
 CALL (const){T=1, v=msg}
+{{x, 0, 0, 1}, name=x, scope=0, typeinf=-1, (g=1, c=0)}, (const){T=18, v===}, (const){T=2, v=6}
 PUSH (const){T=1, v=msg}, (const){T=1, v=_msg}, (const){T=6, v=r}
-PUSH (const){T=1, v=msg}, (const){T=1, v=_p}, {{x, 0, 0, 1}, name=x, scope=0, typeinf=4!, (g=1, c=0)}
+PUSH (const){T=1, v=msg}, (const){T=1, v=_p}, (const){T=1, v=X is 6}
 CALL (const){T=1, v=msg}
+ELSE
+PUSH (const){T=1, v=msg}, (const){T=1, v=_msg}, (const){T=6, v=r}
+PUSH (const){T=1, v=msg}, (const){T=1, v=_p}, (const){T=1, v=IDK what X is}
+CALL (const){T=1, v=msg}
+ENDIF
