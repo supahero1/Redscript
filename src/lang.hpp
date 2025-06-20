@@ -41,7 +41,7 @@ struct rs_type_info
 struct rs_expression
 {
 
-    using _ResultT = std::variant<rbc_constant, std::shared_ptr<rbc_register>, std::shared_ptr<rs_variable>, std::shared_ptr<rs_object>>;
+    using _ResultT = std::variant<rbc_constant, std::shared_ptr<rbc_register>, std::shared_ptr<rs_variable>, std::shared_ptr<rs_object>, std::shared_ptr<void>>;
     bst_operation<token> operation;
     std::shared_ptr<_ResultT> nonOperationalResult = nullptr;
     _ResultT rbc_evaluate(rbc_program&, rs_error*,

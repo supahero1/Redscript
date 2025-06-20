@@ -53,6 +53,7 @@ enum class rbc_scope_type
     ELIF,
     ELSE,
     FUNCTION,
+    MODULE,
     NONE
 };
 
@@ -132,7 +133,7 @@ public:
 };
 template<typename _T>
 using sharedt = std::shared_ptr<_T>;
-typedef std::variant<rbc_constant, sharedt<rbc_register>, sharedt<rs_variable>, sharedt<rs_object>> rbc_value;
+typedef std::variant<rbc_constant, sharedt<rbc_register>, sharedt<rs_variable>, sharedt<rs_object>, sharedt<void>> rbc_value;
 struct rbc_command
 {
     rbc_instruction type;
@@ -167,7 +168,7 @@ struct rbc_function
     std::vector<rbc_function_decorator> decorators;
     // made shared because of forward declaration
     std::shared_ptr<rs_type_info> returnType;
-    
+    std::vector<std::string> modulePath;
 
     bool hasBody = true;
 
@@ -176,7 +177,14 @@ struct rbc_function
     std::string toStr();
     std::string toHumanStr();
 };
-
+struct rs_module
+{
+    // only supports functions for now
+    std::string name;
+    std::vector<std::string> modulePath;
+    std::unordered_map<std::string, std::shared_ptr<rbc_function>> functions;
+    std::unordered_map<std::string, std::shared_ptr<rs_module>> children;
+};
 struct rbc_program
 {
     rs_error* context;
@@ -185,6 +193,9 @@ struct rbc_program
     iterable_stack<std::shared_ptr<rbc_function>> functionStack;
     std::vector<std::shared_ptr<rs_variable>> globalVariables;
     std::unordered_map<std::string, std::shared_ptr<rs_object>> objectTypes;
+    std::unordered_map<std::string, std::shared_ptr<rs_module>> modules;
+    iterable_stack<std::shared_ptr<rs_module>> moduleStack;
+    std::shared_ptr<rs_module> currentModule = nullptr;
     std::unordered_map<std::string, std::shared_ptr<rbc_function>> functions;
     std::shared_ptr<rbc_function> currentFunction = nullptr;
     std::vector<std::shared_ptr<rbc_register>> registers;

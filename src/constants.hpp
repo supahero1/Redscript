@@ -21,6 +21,7 @@
     {"void", {token_type::TYPE_DEF, -1}}, \
     {"return", {token_type::KW_RETURN,0}}, \
     {"method", {token_type::KW_METHOD,0}}, \
+    {"module", {token_type::KW_MODULE,0}}, \
     {"const", {token_type::KW_CONST,0}}, \
     {"optional", {token_type::KW_OPTIONAL,0}}, \
     {"required", {token_type::KW_REQUIRED,0}}, \

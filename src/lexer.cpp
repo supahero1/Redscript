@@ -166,6 +166,16 @@ token_list tlex(const std::string &fName, std::string &content, rs_error *err = 
             case ';':
                 customType = token_type::LINE_END;
                 break;
+            case ':':
+            {
+                if (_At + 1 < S && content.at(_At + 1) == ':')
+                {
+                    adv();
+                    customType = token_type::MODULE_ACCESS;
+                    repr.push_back(':');
+                }
+                break;
+            }
             case '+':
             case '-':
             case '*':

@@ -32,6 +32,7 @@ enum class token_type
     VAR_OPERATOR,
     COMPARE_EQUAL,
     COMPARE_NOTEQUAL,
+    MODULE_ACCESS,
 
     SYMBOL,
 
@@ -48,7 +49,7 @@ enum class token_type
     KW_LIST_TYPE,
     KW_OBJECT_TYPE,
     KW_ANY_TYPE,
-
+    KW_MODULE,
     KW_RETURN,
     KW_METHOD,
     KW_USE,

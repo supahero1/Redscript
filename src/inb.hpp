@@ -13,7 +13,7 @@ namespace conversion
 {
     class CommandFactory;
 };
-typedef std::variant<rbc_constant, std::shared_ptr<rbc_register>, std::shared_ptr<rs_variable>, std::shared_ptr<rs_object>> rbc_value;
+typedef std::variant<rbc_constant, std::shared_ptr<rbc_register>, std::shared_ptr<rs_variable>, std::shared_ptr<rs_object>, std::shared_ptr<void>> rbc_value;
 struct rbc_program;
 #define INB_IMPL_PARAMETERS rbc_program& program, conversion::CommandFactory& factory, std::vector<rbc_value>& parameters, std::string& err 
 

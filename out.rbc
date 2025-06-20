@@ -1,20 +1,9 @@
 kill:
 msg:
-CREATE {{x, 0, 0, 1}, name=x, scope=0, typeinf=-1, (g=1, c=0)}, (const){T=2, v=68}
-IF {{x, 0, 0, 1}, name=x, scope=0, typeinf=-1, (g=1, c=0)}, (const){T=18, v===}, (const){T=2, v=2}
-PUSH (const){T=1, v=msg}, (const){T=1, v=_msg}, (const){T=6, v=r}
-PUSH (const){T=1, v=msg}, (const){T=1, v=_p}, (const){T=1, v=X is 2}
-CALL (const){T=1, v=msg}
-{{x, 0, 0, 1}, name=x, scope=0, typeinf=-1, (g=1, c=0)}, (const){T=18, v===}, (const){T=2, v=4}
-PUSH (const){T=1, v=msg}, (const){T=1, v=_msg}, (const){T=6, v=r}
-PUSH (const){T=1, v=msg}, (const){T=1, v=_p}, (const){T=1, v=X is 4}
-CALL (const){T=1, v=msg}
-{{x, 0, 0, 1}, name=x, scope=0, typeinf=-1, (g=1, c=0)}, (const){T=18, v===}, (const){T=2, v=6}
-PUSH (const){T=1, v=msg}, (const){T=1, v=_msg}, (const){T=6, v=r}
-PUSH (const){T=1, v=msg}, (const){T=1, v=_p}, (const){T=1, v=X is 6}
-CALL (const){T=1, v=msg}
-ELSE
-PUSH (const){T=1, v=msg}, (const){T=1, v=_msg}, (const){T=6, v=r}
-PUSH (const){T=1, v=msg}, (const){T=1, v=_p}, (const){T=1, v=IDK what X is}
-CALL (const){T=1, v=msg}
-ENDIF
+CREATE {{l, 0, 0, 1}, name=l, scope=1, typeinf=5, (g=1, c=0)}, (const){T=2, v=4}
+PUSH (const){T=1, v=append}, (const){T=1, v=val}, {{l, 0, 0, 1}, name=l, scope=1, typeinf=5, (g=1, c=0)}, 
+PUSH (const){T=1, v=append}, (const){T=1, v=l}, (const){T=2, v=4}, 
+CALL (const){T=1, v=append}, 
+POP 
+POP 
+CALL (const){T=1, v=delete}, 

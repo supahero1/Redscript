@@ -48,6 +48,7 @@ typedef std::vector<mc_command> mccmdlist;
 struct mc_function
 {
     std::vector<mc_command> commands;
+    std::vector<std::string> modulePath;
 };
 struct comparison_register
 {
