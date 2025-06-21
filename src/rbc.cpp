@@ -74,6 +74,22 @@ void rbc_program::operator ()(const rbc_command& instruction)
 }
 
 #pragma endregion operators
+std::string rbc_function::getParentHashStr()
+{
+    if (!parent) return "";
+
+    std::shared_ptr<rbc_function> currentParent = parent;
+    std::string parentHash;
+
+    do
+    {
+        parentHash += util::hashToHex(currentParent->name) + '_';
+    } while ((currentParent = currentParent->parent));
+    
+    parentHash.pop_back();
+
+    return parentHash;
+}
 std::string rbc_function::toStr()
 {
     std::stringstream stream;
@@ -488,11 +504,8 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
                 needsCreation = true;
             }
 
-            // a constant value can be initialized as `const x;`.
-            // you can assign 1 value to x before it is locked.
-            // `x = 1;` compiles fine.
-            if (!needsCreation && variable->_const && variable->value)
-                COMP_ERROR_R(RS_SYNTAX_ERROR, "Cannot reassign constant variable.", nullptr);
+            if (!needsCreation && isConst)
+                COMP_ERROR_R(RS_SYNTAX_ERROR, "Cannot reassign constant variable", nullptr);
 
             if(!adv())
                 COMP_ERROR_R(RS_EOF_ERROR, "Expected expression, not EOF.", nullptr);
@@ -559,6 +572,8 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
                 variable->_const = isConst;
                 // no value given
             }
+            else
+                COMP_ERROR_R(RS_SYNTAX_ERROR, "Cannot redefine variable.", variable);
             break;
         case ',':
             if (parameter) break;
@@ -594,12 +609,25 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
         bool internal = false;
         if (func == program.functions.end())
         {
-            if (!program.currentFunction || program.currentFunction->name != name)
+            if (!program.currentFunction)
+            {
+            _notfound:
                 COMP_ERROR_R(RS_SYNTAX_ERROR, "Unknown function name.", false);
-            function = program.currentFunction; // recursion not allowed
-            COMP_ERROR_R(RS_SYNTAX_ERROR, "Recursion is not supported yet.", false);
+            }
+            
+            auto child = program.currentFunction->childFunctions.find(name);
+
+            if (child == program.currentFunction->childFunctions.end())
+                goto _notfound;
+
+            function = child->second;
+
+            if (program.currentFunction->name == name)
+                COMP_ERROR_R(RS_SYNTAX_ERROR, "Recursion is not supported yet.", false);
+
         }else function = func->second;
 
+        // todo get rid useless
         if (function->scope > program.currentScope)
             COMP_ERROR_R(RS_SYNTAX_ERROR, "Nested function definitions cannot be called outside their parent function body.", false);
         int pc = 0; // param count
@@ -661,10 +689,16 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
         }
         if (actualpc != pc)
             COMP_ERROR_R(RS_SYNTAX_ERROR, "No matching function call with pc of {}", false, pc);
+        rbc_command c(rbc_instruction::CALL);
 
-        rbc_command c(rbc_instruction::CALL,
-            rbc_constant(token_type::STRING_LITERAL, name, &start->trace));
-
+        if (!function->parent)
+            c.parameters.push_back(std::make_shared<rbc_value>(rbc_constant(token_type::STRING_LITERAL, name, &start->trace)));
+        else
+        {
+            // pass mem addr of function to instruction as its a child function
+            // and impossible to find otherwise
+            c.parameters.push_back(std::make_shared<rbc_value>(std::static_pointer_cast<void>(function)));
+        }
         if (fromModule)
             c.parameters.push_back(std::make_shared<rbc_value>(rbc_value(fromModule)));
         
@@ -678,6 +712,30 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             COMP_ERROR_R(RS_SYNTAX_ERROR, "Missing semi-colon.", false);
         return true;
     };
+    // must be called at index of :: (module access operator)
+    auto parsemoduleusage = [&](std::shared_ptr<rs_module> currentModule) -> bool
+    {
+        do
+        {
+            if(!adv())
+                COMP_ERROR_R(RS_SYNTAX_ERROR, "Expected function or module name, not EOF.", false);
+            auto module_iter = currentModule->children.find(current->repr);
+            if (module_iter == currentModule->children.end())
+                break; // could be invalid name, or function name.
+            currentModule = module_iter->second;
+            
+            adv();
+        }
+        while(current->type == token_type::MODULE_ACCESS);
+
+        std::string funcName = current->repr;
+        adv();
+        if(!callparse(funcName, true, currentModule))
+            return false;
+
+        return true;
+    };
+
     // assign callparseRef to allow for forward decl calling of lambda
 #pragma endregion function_calls
 #pragma region objects
@@ -760,23 +818,7 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
                 if (_module == program.modules.end())
                     COMP_ERROR(RS_SYNTAX_ERROR, "Unknown module name.");
 
-                std::shared_ptr<rs_module>& currentModule = _module->second;
-                do
-                {
-                    if(!adv())
-                        COMP_ERROR(RS_SYNTAX_ERROR, "Expected function or module name, not EOF.");
-                    auto module_iter = _module->second->children.find(current->repr);
-                    if (module_iter == _module->second->children.end())
-                        break; // could be invalid name, or function name.
-                    currentModule = module_iter->second;
-                    
-                    adv();
-                }
-                while(current->type == token_type::MODULE_ACCESS);
-
-                std::string funcName = current->repr;
-                adv();
-                if(!callparse(funcName, true, currentModule))
+                if (!parsemoduleusage(_module->second))
                     return program;
             }
             break;
@@ -784,7 +826,11 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
         case token_type::MODULE_ACCESS:
         {
             // using current module access operator (::dostuff)
-            COMP_ERROR(RS_UNSUPPORTED_OPERATION_ERROR, "Redscript does not yet support accessing the current module.");
+            if (program.currentModule)
+            {
+                if(!parsemoduleusage(program.currentModule))
+                    return program;
+            }
             break;
         }
         case token_type::KW_MODULE:
@@ -797,9 +843,15 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             std::vector<std::string> modulePath;
             if (program.currentModule)
             {
+                auto& functions = program.currentModule->functions;
+                if (functions.find(name) != functions.end())
+                    COMP_ERROR(RS_SYNTAX_ERROR, "Module already exists with that name.");
                 modulePath = program.currentModule->modulePath;
                 program.moduleStack.push(program.currentModule);
             }
+            else if(program.modules.find(name) != program.modules.end())
+                COMP_ERROR(RS_SYNTAX_ERROR, "Module already exists with that name.");
+
             auto val = program.modules.insert({name, std::make_shared<rs_module>()});
             program.currentModule = val.first->second;
             program.currentModule->name = name;
@@ -836,6 +888,16 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             else
                 COMP_ERROR(RS_SYNTAX_ERROR, "Invalid function name.");
             
+            if (program.currentModule)
+            {
+                auto& functions = program.currentModule->functions;
+                if (functions.find(name) != functions.end())
+                    COMP_ERROR(RS_SYNTAX_ERROR, "Function already exists in module.");
+            }
+            else if (program.functions.find(name) != program.functions.end())
+                COMP_ERROR(RS_SYNTAX_ERROR, "Function already exists.");
+
+
             if (!adv())
                 COMP_ERROR(RS_SYNTAX_ERROR, "Expected function definition, not EOF.");  
             
@@ -957,18 +1019,26 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
 
                     // TODO: should functions have global scope access? if so, we need to keep track of when they are created.
                     // I think not.
+
+                    if (!program.functionStack.empty())
+                    {
+                        auto& parent = program.functionStack.top();
+
+                        program.currentFunction->parent = parent;
+                        parent->childFunctions.insert({program.currentFunction->name, program.currentFunction});
+                        program.currentFunction = parent;
+
+                        program.functionStack.pop();
+                        break;
+                    }
+
+
                     if (program.currentModule)
                         program.currentModule->functions.insert({program.currentFunction->name, program.currentFunction});
                     else
                         program.functions.insert({program.currentFunction->name, program.currentFunction});
 
-                    if (!program.functionStack.empty())
-                    {
-                        program.currentFunction = program.functionStack.top();
-                        program.functionStack.pop();
-                    }
-                    else
-                        program.currentFunction.reset();
+                    program.currentFunction.reset();
                     break;
                 }
                 case rbc_scope_type::IF:
@@ -1335,26 +1405,36 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                 case rbc_instruction::CALL:
                 {
                     RS_ASSERT_SIZE(size > 0);
-                    rbc_constant& name = std::get<rbc_constant>(*instruction.parameters.at(0));
                     std::shared_ptr<rbc_function> f = nullptr;
-                    rs_module* fromModule = nullptr;
-                    if (size > 1)
+
+                    rbc_value& p0 = *instruction.parameters.at(0);
+                    std::string name;
+                    if (p0.index() == 0)
                     {
-                        fromModule = (rs_module*) std::get<std::shared_ptr<void>>(*instruction.parameters.at(1)).get();
-                        
-                        if(!fromModule)
+                        name = std::get<rbc_constant>(*instruction.parameters.at(0)).val;
+                        rs_module* fromModule = nullptr;
+                        if (size > 1)
                         {
-                            err = "Function defined in module has caused seg fault. Flag this error on the github, it should not occur.";
-                            break;
+                            fromModule = (rs_module*) std::get<std::shared_ptr<void>>(*instruction.parameters.at(1)).get();
+                            
+                            if(!fromModule)
+                            {
+                                err = "Function defined in module has caused seg fault. Flag this error on the github, it should not occur.";
+                                break;
+                            }
+                            else
+                                f = fromModule->functions.find(name)->second;
                         }
                         else
-                            f = fromModule->functions.find(name.val)->second;
+                            f = program.functions.find(name)->second;
                     }
                     else
-                        f = program.functions.find(name.val)->second;
-
+                    {
+                        std::shared_ptr<void> func = std::get<std::shared_ptr<void>>(p0);
+                        f = std::static_pointer_cast<rbc_function>(func);
+                        name = f->name;
+                    }
                     rbc_function& func = *f;
-
                     factory.disableBuffer();
                     
                     if (std::find(func.decorators.begin(), func.decorators.end(), rbc_function_decorator::CPP) != func.decorators.end())
@@ -1377,10 +1457,10 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
                             reversed.push_back(std::move(*it));
                         }
                         parameters = std::move(reversed);
-                        auto decl = inb_impls::INB_IMPLS_MAP.find(name.val);
+                        auto decl = inb_impls::INB_IMPLS_MAP.find(name);
                         if (decl == inb_impls::INB_IMPLS_MAP.end())
                         {
-                            err = "Fatal: inbuilt (__cpp__ decl) c++ function mapping for '" + name.val + "' doesn't exist. This could be due to a mismatch in versions.";
+                            err = "Fatal: inbuilt (__cpp__ decl) c++ function mapping for '" + name + "' doesn't exist. This could be due to a mismatch in versions.";
                             return {};
                         }
                         decl->second(program, factory, parameters, err);
@@ -1754,8 +1834,18 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
     
     // try{
         mcprogram.globalFunction.commands = parseFunction(program.globalFunction.instructions);
-        auto& allFunctions = program.functions;
 
+        std::vector<std::shared_ptr<rbc_function>> allFunctions;
+
+
+        // this code is a monstrosity, but all it does it get all the functions ever created and 
+        // put them in 1 neat list.
+        for(auto& func : program.functions)
+        {
+            allFunctions.push_back(func.second);
+            for(auto& child : func.second->childFunctions)
+                allFunctions.push_back(child.second);
+        }
         // add module functions
         if (program.modules.size() > 0)
         {
@@ -1769,7 +1859,17 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
             {
                 auto& mod = modules.top();
                 auto& newFunctions = mod->functions;
-                allFunctions.insert(newFunctions.begin(), newFunctions.end());
+                if (newFunctions.size() > 0)
+                {
+                    for(auto& func : newFunctions)
+                    {
+                        allFunctions.push_back(func.second);
+
+                        for(auto& child : func.second->childFunctions)
+                            allFunctions.push_back(child.second);
+                    }
+
+                }
 
                 for(auto& child : mod->children)
                     modules.push(child.second);
@@ -1778,19 +1878,20 @@ mc_program tomc(rbc_program& program, const std::string& moduleName, std::string
             }
         }
 
-
-
         for(auto& function : allFunctions)
         {
-            auto& decorators = function.second->decorators;
+            auto& decorators = function->decorators;
             if 
             (
                 std::find(decorators.begin(), decorators.end(), rbc_function_decorator::CPP) == decorators.end() &&
                 std::find(decorators.begin(), decorators.end(), rbc_function_decorator::EXTERN) == decorators.end()
             ) // not inbuilt function 
             {
-                mc_function f{parseFunction(function.second->instructions), function.second->modulePath};
-                mcprogram.functions.insert({function.first, f});
+                mc_function f{function->name,
+                              parseFunction(function->instructions),
+                              function->modulePath};
+                f.parentalHashStr = function->getParentHashStr();
+                mcprogram.functions.push_back(f);
             }
         }
     // } catch (std::exception& e)
@@ -1864,15 +1965,19 @@ namespace conversion
     CommandFactory::_This CommandFactory::invoke           (const std::string& module, rbc_function& func)
     {
         // TODO: MACROS & NAMESPACES
+
+        std::string parentHashStr = func.getParentHashStr();
+        if (!parentHashStr.empty()) parentHashStr.push_back('_');
+
         if (func.modulePath.empty())
-            create_and_push(MC_FUNCTION_CMD_ID, module + ':' + func.name);
+            create_and_push(MC_FUNCTION_CMD_ID, module + ':' + parentHashStr + func.name);
         else
         {
             std::string path;
             for(std::string& s : func.modulePath)
                 path += s + '/';
 
-            create_and_push(MC_FUNCTION_CMD_ID, module + ':' + path + func.name);
+            create_and_push(MC_FUNCTION_CMD_ID, module + ':' + path + parentHashStr + func.name);
         }
         return THIS;
     }

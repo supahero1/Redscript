@@ -145,6 +145,7 @@ struct rbc_command
     {
         (parameters.emplace_back(std::make_shared<rbc_value>(std::forward<_RBCValues>(values))), ...);
     }
+    rbc_command(rbc_instruction _type) : type(_type){}
 
     // defined outside due to forward decl
     std::string tostr();
@@ -169,11 +170,14 @@ struct rbc_function
     // made shared because of forward declaration
     std::shared_ptr<rs_type_info> returnType;
     std::vector<std::string> modulePath;
+    std::shared_ptr<rbc_function> parent = nullptr;
+    std::unordered_map<std::string, std::shared_ptr<rbc_function>> childFunctions;
 
     bool hasBody = true;
 
     rs_variable* getNthParameter(size_t p);
     rs_variable* getParameterByName(const std::string& name);
+    std::string  getParentHashStr();
     std::string toStr();
     std::string toHumanStr();
 };

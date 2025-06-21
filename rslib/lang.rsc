@@ -10,3 +10,9 @@ method: void kill  (_p: selector!)                     extern __cpp__;
 
 // method: player! getPlayer(_name: string!) __single__
 // { return __cpp__(::playerGet); }
+
+module lists
+{
+    method: void append(__l: list, __v: any) __cpp__;
+    
+}

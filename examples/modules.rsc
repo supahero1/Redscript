@@ -1,25 +1,38 @@
 use lang;
-
-module lists
+method z()
 {
-    method: void append(l: list|string, val: any)
+    
+}
+
+module test
+{
+    method z()
     {
-        val = 2;
+        msg(@r, "in z!");
     }
-    module extended
+    method x()
     {
-        method: void delete()
+        method y()
         {
-            const x;
-            x = 4;
-            x = 2;
-            msg(@r, "Not implemented");
+            msg(@r, "in y!");
         }
+        ::z(); // z();
+
+        ::y();
     }
 }
-// to access:
-l: list = 4;
+method x()
+{
+    method y()
+    {
+        msg(@r, "In y (not in module y)!");
+    }
+    y();
+}
 
-lists::append(l, 4);
-// not the same as : minecraft:redscript // this is an nbt path
-lists::extended::delete();
+test::x();
+::test::z();
+
+::x();
+// outputs: In z! - In y! - In z! - In y (not in module y)!
+

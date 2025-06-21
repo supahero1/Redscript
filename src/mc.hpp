@@ -19,6 +19,8 @@
 
 typedef unsigned int uint;
 struct rs_variable;
+struct rbc_function;
+
 
 struct mc_command
 {
@@ -47,8 +49,10 @@ struct mc_command
 typedef std::vector<mc_command> mccmdlist;
 struct mc_function
 {
+    std::string name;
     std::vector<mc_command> commands;
     std::vector<std::string> modulePath;
+    std::string parentalHashStr;
 };
 struct comparison_register
 {
@@ -65,7 +69,7 @@ struct mc_program
     uint varStackCount = 0;
     iterable_stack<std::pair<int, std::shared_ptr<comparison_register>>> blocks;
     std::vector<std::shared_ptr<comparison_register>> comparisonRegisters;
-    std::unordered_map<std::string, mc_function> functions;
+    std::vector<mc_function> functions;
     mc_function* currentFunction = nullptr;
     // parameter name: parameter id
     std::vector<rs_variable*> stack;

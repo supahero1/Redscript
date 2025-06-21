@@ -1,9 +1,7 @@
+x:
+	CALL 
 kill:
 msg:
-CREATE {{l, 0, 0, 1}, name=l, scope=1, typeinf=5, (g=1, c=0)}, (const){T=2, v=4}
-PUSH (const){T=1, v=append}, (const){T=1, v=val}, {{l, 0, 0, 1}, name=l, scope=1, typeinf=5, (g=1, c=0)}, 
-PUSH (const){T=1, v=append}, (const){T=1, v=l}, (const){T=2, v=4}, 
-CALL (const){T=1, v=append}, 
-POP 
-POP 
-CALL (const){T=1, v=delete}, 
+CALL (const){T=1, v=x}, 
+CALL (const){T=1, v=z}, 
+CALL (const){T=1, v=x}

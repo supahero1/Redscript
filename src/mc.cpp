@@ -239,12 +239,20 @@ void writemc(mc_program &program, std::string name, const std::string &path, std
         }
         for (auto &function : program.functions)
         {
-            if (function.second.modulePath.size() == 0)
-                to = funcPath / (function.first + ".mcfunction");
+
+            std::filesystem::path parentHashPath;
+
+            if (function.modulePath.size() == 0)
+            {
+                if (function.parentalHashStr.empty())
+                    to = funcPath / (function.name + ".mcfunction");
+                else
+                    to = funcPath / (function.parentalHashStr + '_' + function.name + ".mcfunction");
+            }
             else
             {
                 to = funcPath;
-                for(std::string& _module : function.second.modulePath)
+                for(std::string& _module : function.modulePath)
                 {
                     to /= _module;
                     // maybe trying to create way too many directories.
@@ -252,9 +260,12 @@ void writemc(mc_program &program, std::string name, const std::string &path, std
                     std::filesystem::create_directory(to);
                 }
 
-                to /= (function.first + ".mcfunction");
+                if (function.parentalHashStr.empty())
+                    to /= (function.name + ".mcfunction");
+                else
+                    to /= (function.parentalHashStr + '_' + function.name + ".mcfunction");
             }
-            if (!writeFunction(function.second, to))
+            if (!writeFunction(function, to))
                 goto _error;
         }
         // TODO: other functions
