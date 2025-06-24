@@ -64,6 +64,7 @@ enum class token_type
 
     KW_FOR,
     KW_WHILE,
+    KW_IN,
     KW_BREAK,
     KW_CONTINUE,
 

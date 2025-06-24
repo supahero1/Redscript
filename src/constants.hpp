@@ -29,6 +29,7 @@
     {"for", {token_type::KW_FOR,0}}, \
     {"while", {token_type::KW_WHILE,0}}, \
     {"break", {token_type::KW_BREAK,0}}, \
+    {"in", {token_type::KW_IN,0}}, \
     {"continue", {token_type::KW_CONTINUE,0}}, \
     {"use", {token_type::KW_USE,0}}, \
     {"if", {token_type::KW_IF,0}}, \

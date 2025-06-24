@@ -735,7 +735,6 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
 
         return true;
     };
-
     // assign callparseRef to allow for forward decl calling of lambda
 #pragma endregion function_calls
 #pragma region objects
@@ -786,6 +785,45 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             COMP_ERROR_R(RS_EOF_ERROR, "Unterminated object body.", nullptr);
         return std::make_shared<rs_object>(obj);
     };
+    // must be called at the index of the opening bracket 
+    auto forparse = [&]() -> bool
+    {
+        if (!adv())
+        {
+            _eoferr:
+                COMP_ERROR_R(RS_EOF_ERROR, "Expected expression, not EOF.", false);
+        }
+        std::shared_ptr<rs_variable> var;
+        bool _const = false;
+        token& at;
+        rs_type_info type_info;
+        if (current->type == token_type::KW_CONST)
+        {
+            _const = true;
+            if(!adv()) goto _eoferr;
+
+            at = *current;
+        }
+        if (follows(token_type::SYMBOL, ':'))
+        {
+            type_info = typeparse();
+
+            if (err->trace.ec)
+                return false;
+        }
+        program.currentScope++;
+        var = std::make_shared<rs_variable>(at, type_info, program.currentScope, false);
+        var->_const = _const;
+
+        if (follows(token_type::KW_IN))
+        {
+            auto expr = expreval(program, tokens, _At, err, true, false);
+            // todo parse function | variable, don't accept math, so dont use expreval.
+            if (!expr.nonOperationalResult)
+        } else COMP_ERROR_R(RS_SYNTAX_ERROR, "Expected keyword 'in'.", false);
+        
+        return false;
+    }
 #pragma endregion objects
     do
     {
