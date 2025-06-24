@@ -793,37 +793,31 @@ rbc_program torbc(token_list& tokens, std::string fName, std::string& content, r
             _eoferr:
                 COMP_ERROR_R(RS_EOF_ERROR, "Expected expression, not EOF.", false);
         }
-        std::shared_ptr<rs_variable> var;
         bool _const = false;
-        token& at;
-        rs_type_info type_info;
         if (current->type == token_type::KW_CONST)
         {
             _const = true;
-            if(!adv()) goto _eoferr;
-
-            at = *current;
+            adv();
         }
-        if (follows(token_type::SYMBOL, ':'))
-        {
-            type_info = typeparse();
+        else if (current->type != token_type::WORD)
+            COMP_ERROR_R(RS_SYNTAX_ERROR, "Unexepcted token.", false);
 
-            if (err->trace.ec)
-                return false;
-        }
-        program.currentScope++;
-        var = std::make_shared<rs_variable>(at, type_info, program.currentScope, false);
-        var->_const = _const;
+        _At++; // raw advance, maintain current as name of variable.
+        std::shared_ptr<rs_variable> var = varparse(*current, false, true, false, _const);
+
+        if (!var)
+            return false;
 
         if (follows(token_type::KW_IN))
         {
+            // can be function call to range() or an object literal / variable, list literal / variable.
             auto expr = expreval(program, tokens, _At, err, true, false);
             // todo parse function | variable, don't accept math, so dont use expreval.
-            if (!expr.nonOperationalResult)
+            COMP_ERROR_R(RS_UNSUPPORTED_OPERATION_ERROR, "Not implemented as of this version.", false);
         } else COMP_ERROR_R(RS_SYNTAX_ERROR, "Expected keyword 'in'.", false);
         
         return false;
-    }
+    };
 #pragma endregion objects
     do
     {
